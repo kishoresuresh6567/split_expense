@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c0a10">
+  <meta name="color-scheme" content="dark">
+  <title>Gather — Shared expenses</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/gather-logo.svg">
+  <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+  <header class="app-bar">
+    <button type="button" id="groups-toggle" class="menu-button" aria-label="Show all groups" aria-controls="groups-drawer" aria-expanded="false"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <div class="brand"><img class="brand-logo" src="./assets/gather-logo.svg" alt="" width="36" height="36"><span>Gather</span></div>
+  </header>
+  <dialog class="sidebar" id="groups-drawer" aria-labelledby="groups-heading">
+    <div class="sidebar-heading"><h2 id="groups-heading">Groups <span id="group-count">0</span></h2><button type="button" id="close-groups" class="close-button" aria-label="Close groups">×</button></div>
+    <button class="primary" id="create-group">+ Create group</button>
+    <nav id="group-nav" aria-label="Groups"></nav>
+    <p class="storage-note">Saved in this browser.<br>No account required.</p>
+  </dialog>
+  <main>
+    <section id="welcome" class="welcome" hidden>
+      <span class="welcome-icon">÷</span>
+      <h1>Split expenses with your group</h1>
+      <p>Create a group, add the members, then record an expense.<br>Choose who shares the cost. We’ll calculate who owes whom.</p>
+      <p class="welcome-hint">Open the ☰ menu, then choose <strong>+ Create group</strong>.</p>
+    </section>
+    <div id="group-workspace" hidden>
+      <header class="page-heading">
+        <div><p class="eyebrow">GROUP</p><h1 id="page-title"></h1><p id="page-description"></p></div>
+        <div class="group-controls">
+          <button class="secondary" id="manage-members">Manage members</button>
+          <details id="group-options" class="group-options">
+            <summary class="secondary">Group options ⌄</summary>
+            <div class="group-options-menu"><button type="button" id="close-group">Close group</button><button type="button" id="reopen-group" hidden>Reopen group</button><button type="button" id="delete-group" class="delete-group">Delete group</button></div>
+          </details>
+        </div>
+      </header>
+      <p id="closed-group-note" class="closed-group-note" hidden>This group is closed. You can view its records. Reopen it from Group options to make changes.</p>
+      <div class="summary" id="stats"></div>
+      <nav class="tabs" aria-label="Group sections">
+        <button id="expenses-tab" class="tab active" aria-current="page">Expenses</button>
+        <button id="balances-tab" class="tab">Balances</button>
+      </nav>
+      <section id="expenses-section" aria-labelledby="expenses-title">
+        <div class="section-heading"><div><h2 id="expenses-title">Expenses</h2><p>Record a cost and choose who shares it.</p></div><button class="primary" id="add-expense">+ Add expense</button></div>
+        <input id="search" class="search" type="search" placeholder="Search by expense or payer" aria-label="Search expenses">
+        <div id="expenses" class="expense-list"></div>
+        <p id="expense-count" class="list-count"></p>
+      </section>
+      <section id="balances-section" aria-labelledby="balances-title" hidden>
+        <div class="section-heading"><div><h2 id="balances-title">Who owes whom</h2><p>Record a repayment only after the money has been paid.</p></div></div>
+        <div id="settlements" class="panel"></div>
+        <section id="payments-panel" hidden>
+          <div class="section-heading"><div><h2>Repayment history</h2><p>These payments are included in the balances above.</p></div></div>
+          <div id="payments" class="panel"></div>
+        </section>
+      </section>
+    </div>
+  </main>
+  <dialog id="dialog">
+    <form id="form">
+      <div class="dialog-heading"><h2 id="dialog-title"></h2><button type="button" id="close-dialog" class="close-button" aria-label="Close">×</button></div>
+      <div id="fields"></div>
+      <p id="error" class="error" role="alert"></p>
+      <div class="dialog-actions"><button type="button" class="secondary" id="cancel">Cancel</button><button type="submit" class="primary" id="submit">Save</button></div>
+    </form>
+  </dialog>
+  <div id="toast" role="status" hidden></div>
+  <script src="./js/expense-logic.js"></script>
+  <script src="./js/views.js"></script>
+  <script src="./js/forms.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

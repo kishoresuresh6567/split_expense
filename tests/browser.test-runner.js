@@ -1,0 +1,152 @@
+// Real Chromium smoke check. Uses a separate temporary profile and sample data.
+const {spawn}=require('node:child_process');
+const fs=require('node:fs');
+const path=require('node:path');
+const os=require('node:os');
+const {pathToFileURL}=require('node:url');
+const assert=require('node:assert/strict');
+async function main(){
+ const keepAlive=setInterval(()=>{},1000);
+ const profile=fs.mkdtempSync(path.join(os.tmpdir(),'split-expenses-browser-'));
+ const exe=process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe';
+ const child=spawn(exe,['--headless=new','--no-first-run','--no-default-browser-check','--disable-gpu','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{windowsHide:true});
+ let ws;
+ const pending=new Map();
+ const deadline=setTimeout(()=>{
+   for(const request of pending.values())request.reject(Error('Browser test timed out'));
+   if(ws)ws.close();
+   child.kill();
+ },30000);
+ try{
+ const endpoint=await new Promise((resolve,reject)=>{let output='';const timeout=setTimeout(()=>reject(Error('Browser startup timed out')),15000);child.on('error',reject);child.stderr.on('data',data=>{output+=data;const match=output.match(/DevTools listening on (ws:\/\/[^\s]+)/);if(match){clearTimeout(timeout);resolve(match[1]);}});});
+ ws=new WebSocket(endpoint);await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject;});
+ let seq=0;const errors=[];
+ ws.onmessage=event=>{const m=JSON.parse(event.data);if(m.id){const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.text+': '+m.params.exceptionDetails.exception?.description);};
+ const call=(method,params={},sessionId)=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params,sessionId}));});
+ const {targetId}=await call('Target.createTarget',{url:'about:blank'});
+ const {sessionId}=await call('Target.attachToTarget',{targetId,flatten:true});
+ await call('Runtime.enable',{},sessionId);
+ await call('Network.enable',{},sessionId);
+ await call('Network.setBlockedURLs',{urls:['*fonts.googleapis.com*','*fonts.gstatic.com*']},sessionId);
+ const evaluate=async expression=>{const r=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true},sessionId);if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value;};
+ await call('Page.navigate',{url:process.env.TEST_URL||pathToFileURL(path.join(__dirname,'..','public','index.html')).href},sessionId);
+ for(let i=0;i<50;i++){if(await evaluate('document.readyState === "complete"'))break;await new Promise(r=>setTimeout(r,100));}
+ assert.equal(await evaluate('document.readyState'),'complete','Page must finish loading without external fonts');
+ assert.deepEqual(errors,[],'Page loads without JavaScript errors');
+ const run=async code=>{const result=await evaluate(`(()=>{${code};return document.querySelector('#error').textContent;})()`);assert.equal(result,'');};
+ await run(`document.querySelector('#groups-toggle').click()`);
+ assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),true);
+ await run(`document.querySelector('#close-groups').click()`);
+ assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),false);
+ await run(`document.querySelector('#groups-toggle').click();document.querySelector('#create-group').click()`);
+ assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),false);
+ assert.equal(await evaluate(`document.querySelector('#dialog').open`),true);
+ await run(`document.querySelector('#group-name').value='Browser test';document.querySelector('#member-names').value='Alex, Bea, Casey';document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`document.querySelector('#dialog').open`),false);
+ assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'1');
+ await run(`document.querySelector('#groups-toggle').click()`);
+ assert.equal(await evaluate(`document.querySelectorAll('#group-nav [data-group]').length`),1);
+ await run(`document.querySelector('#group-nav [data-group]').click()`);
+ assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),false);
+ await run(`document.querySelector('#manage-members').click();document.querySelector('#new-members').value='Drew';document.querySelector('#submit').click()`);
+ await run(`document.querySelector('#add-expense').click();document.querySelector('#description').value='Lunch';document.querySelector('#amount').value='100';document.querySelectorAll('[name=member]')[3].click();document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`document.querySelectorAll('.expense-row').length`),1);
+ await run(`document.querySelector('#manage-members').click()`);
+ assert.equal(await evaluate(`document.querySelectorAll('[data-remove-member]:disabled').length`),3,'Recorded members stay protected');
+ await run(`document.querySelector('[data-remove-member]:not(:disabled)').click()`);
+ assert.equal(await evaluate(`document.querySelectorAll('#member-list .member-row').length`),3,'Unused member removed');
+ await run(`document.querySelector('#close-dialog').click()`);
+ await run(`document.querySelector('.expense-row summary').click()`);
+ assert.match(await evaluate(`document.querySelector('.expense-expanded').textContent`),/33.34/);
+ await run(`document.querySelector('#balances-tab').click()`);
+ assert.equal(await evaluate(`document.querySelector('#expenses-section').hidden`),true);
+ await run(`document.querySelector('[data-pay]').click();document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`document.querySelector('#payments-panel').hidden`),false);
+ await run(`document.querySelector('[data-undo]').click();document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`document.querySelector('#payments-panel').hidden`),true);
+ await run(`document.querySelector('#expenses-tab').click();document.querySelector('#manage-members').click();document.querySelector('#new-members').value='Erin, Finn';document.querySelector('#submit').click();document.querySelector('[data-edit]').click()`);
+ assert.equal(await evaluate(`document.querySelectorAll('#member-checks input[type=checkbox]').length`),5);
+ assert.equal(await evaluate(`document.querySelectorAll('#member-checks input[type=checkbox]:checked').length`),3,'Existing selections are preserved');
+ await run(`document.querySelector('#select-all-members').click();document.querySelector('#submit').click()`);
+ assert.match(await evaluate(`document.querySelector('#expenses').textContent`),/Split among 5 members/);
+ await run(`document.querySelector('[data-edit]').click();document.querySelectorAll('#member-checks input[type=checkbox]')[1].click();document.querySelector('#description').value='Team lunch';document.querySelector('#amount').value='120';document.querySelector('#submit').click()`);
+ assert.match(await evaluate(`document.querySelector('#expenses').textContent`),/Split among 4 members/);
+ assert.match(await evaluate(`document.querySelector('#expenses').textContent`),/Team lunch/);
+ assert.match(await evaluate(`document.querySelector('.expense-amount').textContent`),/120.00/);
+ // Switch the same expense through every custom method and confirm saved fields restore.
+ for(const [method,values] of [['amounts',['10','20','30','60']],['shares',['1','2','3','6']],['percentage',['10','20','30','40']]]){
+   await run(`document.querySelector('[data-edit]').click();document.querySelector('[name=splitMethod][value=${method}]').click()`);
+   assert.equal(await evaluate(`document.querySelectorAll('[name=splitMethod]').length`),4);
+   await run(`document.querySelectorAll('[data-value]:not(:disabled)').forEach((input,index)=>{input.value=${JSON.stringify(values)}[index];input.dispatchEvent(new Event('input',{bubbles:true}));});document.querySelector('#submit').click()`);
+   assert.equal(await evaluate(`document.querySelector('#dialog').open`),false,method+' saves');
+   await run(`document.querySelector('[data-edit]').click()`);
+   assert.equal(await evaluate(`document.querySelector('[name=splitMethod]:checked').value`),method);
+   assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-value]:not(:disabled)'),input=>input.value)`),values);
+   await run(`document.querySelector('#cancel').click()`);
+ }
+ await run(`document.querySelector('[data-edit]').click()`);
+ await evaluate(`document.querySelector('[data-value]:not(:disabled)').value='11';document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`document.querySelector('#dialog').open`),true,'Invalid percentage total is rejected');
+ assert.match(await evaluate(`document.querySelector('#error').textContent`),/100%/);
+ await run(`document.querySelector('[name=splitMethod][value=even]').click();document.querySelector('#submit').click()`);
+ await run(`document.querySelector('[data-edit]').click()`);
+ assert.equal(await evaluate(`document.querySelector('[name=splitMethod]:checked').value`),'even');
+ await run(`document.querySelector('#cancel').click()`);
+ await run(`document.querySelector('#search').value='missing';document.querySelector('#search').dispatchEvent(new Event('input'))`);
+ assert.equal(await evaluate(`document.querySelectorAll('#expenses .expense-row').length`),0);
+ await run(`document.querySelector('#search').value='';document.querySelector('#search').dispatchEvent(new Event('input'))`);
+ await call('Page.reload',{},sessionId);
+ for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate('document.readyState === "complete" && !!document.querySelector("[data-delete]")'))break;}
+ assert.equal(await evaluate(`document.querySelectorAll('#expenses .expense-row').length`),1,'Saved expense survives reload');
+ assert.equal(await evaluate(`document.querySelectorAll('#create-group').length`),1);
+ await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true},sessionId);
+ assert.equal(await evaluate(`document.documentElement.scrollWidth <= window.innerWidth`),true,'Mobile layout fits viewport');
+ await call('Emulation.clearDeviceMetricsOverride',{},sessionId);
+ await run(`document.querySelector('#group-options').open=true;document.querySelector('#close-group').click();document.querySelector('#cancel').click()`);
+ assert.equal(await evaluate(`document.querySelector('#closed-group-note').hidden`),true,'Cancelling close leaves the group active');
+ await run(`document.querySelector('#group-options').open=true;document.querySelector('#close-group').click();document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`document.querySelector('#closed-group-note').hidden`),false);
+ assert.equal(await evaluate(`document.querySelector('#add-expense').hidden`),true);
+ assert.equal(await evaluate(`document.querySelectorAll('#active-group-nav [data-group]').length`),0);
+ assert.equal(await evaluate(`document.querySelectorAll('#closed-group-nav [data-group]').length`),1);
+ await call('Page.reload',{},sessionId);
+ for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.readyState==='complete' && !document.querySelector('#closed-group-note').hidden`))break;}
+ assert.equal(await evaluate(`document.querySelector('#closed-group-note').hidden`),false,'Closed status survives reload');
+ assert.equal(await evaluate(`document.querySelectorAll('#expenses .expense-row').length`),1,'Closing preserves expenses');
+ await run(`document.querySelector('#groups-toggle').click();document.querySelector('#closed-group-nav [data-group]').click()`);
+ await run(`document.querySelector('#group-options').open=true;document.querySelector('#reopen-group').click()`);
+ assert.equal(await evaluate(`document.querySelectorAll('#closed-group-nav [data-group]').length`),0);
+ assert.equal(await evaluate(`document.querySelectorAll('#active-group-nav [data-group]').length`),1);
+ assert.equal(await evaluate(`document.querySelector('#add-expense').hidden`),false);
+ await run(`document.querySelector('.expense-row summary').click();document.querySelector('[data-delete]').click();document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`document.querySelectorAll('#expenses .expense-row').length`),0);
+ await run(`document.querySelector('#group-options').open=true;document.querySelector('#delete-group').click();document.querySelector('#cancel').click()`);
+ assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'1','Cancelling deletion preserves group');
+ await run(`document.querySelector('#group-options').open=true;document.querySelector('#close-group').click();document.querySelector('#submit').click()`);
+ await run(`document.querySelector('#group-options').open=true;document.querySelector('#delete-group').click();document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`document.querySelector('#welcome').hidden`),false);
+ assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'0');
+ assert.equal(await evaluate(`document.querySelectorAll('#group-nav [data-group]').length`),0);
+ await call('Page.reload',{},sessionId);
+ for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.readyState==='complete' && !document.querySelector('#welcome').hidden`))break;}
+ assert.equal(await evaluate(`document.querySelector('#welcome').hidden`),false,'Deleted group does not return after reload');
+ assert.deepEqual(errors,[]);
+ console.log('PASS: browser expense workflows, all split methods, closing and reopening groups, deletion confirmation, and persistence after reload.');
+ }finally{
+   clearInterval(keepAlive);
+   clearTimeout(deadline);
+   if(ws)ws.close();
+   if(child.exitCode===null && child.signalCode===null){
+     await new Promise(resolve=>{
+       const timeout=setTimeout(resolve,5000);
+       child.once('exit',()=>{clearTimeout(timeout);resolve();});
+       child.kill();
+     });
+   }
+   const resolvedProfile=path.resolve(profile);
+   if(path.dirname(resolvedProfile)!==path.resolve(os.tmpdir()) || !path.basename(resolvedProfile).startsWith('split-expenses-browser-'))throw Error('Unexpected cleanup path');
+   await fs.promises.rm(resolvedProfile,{recursive:true,force:true,maxRetries:10,retryDelay:250});
+   console.log('Temporary browser profile cleaned up.');
+ }
+}
+main().catch(error=>{console.error(error);process.exitCode=1;});

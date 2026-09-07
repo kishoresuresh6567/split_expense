@@ -1,0 +1,11 @@
+{
+  "name": "gather",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "node --watch server/index.js",
+    "start": "node server/index.js",
+    "test": "node --test tests/expense-logic.test.js",
+    "test:browser": "node tests/browser.test-runner.js"
+  }
+}

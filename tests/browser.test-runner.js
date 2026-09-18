@@ -9,31 +9,42 @@ async function main(){
  const keepAlive=setInterval(()=>{},1000);
  const profile=fs.mkdtempSync(path.join(os.tmpdir(),'split-expenses-browser-'));
  const exe=process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe';
- const child=spawn(exe,['--headless=new','--no-first-run','--no-default-browser-check','--disable-gpu','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{windowsHide:true});
+ const child=spawn(exe,['--headless=new','--disable-background-timer-throttling','--disable-renderer-backgrounding','--no-first-run','--no-default-browser-check','--disable-gpu','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{windowsHide:true});
  let ws;
  const pending=new Map();
  const deadline=setTimeout(()=>{
-   for(const request of pending.values())request.reject(Error('Browser test timed out'));
+   for(const request of pending.values())request.reject(Error('Browser test timed out during ' + request.method));
    if(ws)ws.close();
    child.kill();
- },30000);
+ },60000);
  try{
  const endpoint=await new Promise((resolve,reject)=>{let output='';const timeout=setTimeout(()=>reject(Error('Browser startup timed out')),15000);child.on('error',reject);child.stderr.on('data',data=>{output+=data;const match=output.match(/DevTools listening on (ws:\/\/[^\s]+)/);if(match){clearTimeout(timeout);resolve(match[1]);}});});
  ws=new WebSocket(endpoint);await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject;});
  let seq=0;const errors=[];
  ws.onmessage=event=>{const m=JSON.parse(event.data);if(m.id){const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.text+': '+m.params.exceptionDetails.exception?.description);};
- const call=(method,params={},sessionId)=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params,sessionId}));});
+ const call=(method,params={},sessionId)=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject,method});if(process.env.DEBUG_BROWSER)console.log(method, params.expression?.slice(0,100)||'');ws.send(JSON.stringify({id,method,params,sessionId}));});
  const {targetId}=await call('Target.createTarget',{url:'about:blank'});
  const {sessionId}=await call('Target.attachToTarget',{targetId,flatten:true});
  await call('Runtime.enable',{},sessionId);
+ await call('Page.enable',{},sessionId);
  await call('Network.enable',{},sessionId);
  await call('Network.setBlockedURLs',{urls:['*fonts.googleapis.com*','*fonts.gstatic.com*']},sessionId);
  const evaluate=async expression=>{const r=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true},sessionId);if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value;};
- await call('Page.navigate',{url:process.env.TEST_URL||pathToFileURL(path.join(__dirname,'..','public','index.html')).href},sessionId);
+ await call('Page.addScriptToEvaluateOnNewDocument',{source:fs.readFileSync(path.join(__dirname,'cloud-fixture.js'),'utf8')},sessionId);
+ await call('Page.navigate',{url:process.env.TEST_URL||pathToFileURL(path.join(__dirname,'..','dist','index.html')).href},sessionId);
  for(let i=0;i<50;i++){if(await evaluate('document.readyState === "complete"'))break;await new Promise(r=>setTimeout(r,100));}
  assert.equal(await evaluate('document.readyState'),'complete','Page must finish loading without external fonts');
  assert.deepEqual(errors,[],'Page loads without JavaScript errors');
- const run=async code=>{const result=await evaluate(`(()=>{${code};return document.querySelector('#error').textContent;})()`);assert.equal(result,'');};
+ assert.equal(await evaluate(`document.querySelector('#auth-panel').hidden`),false,'Signed-out users see sign-in');
+ assert.equal(await evaluate(`document.querySelector('#groups-toggle').hidden`),true,'Groups are hidden until sign-in');
+ assert.equal(await evaluate(`document.querySelector('#sign-in-submit').textContent`),'Continue with Google','Creators have one Google sign-in button');
+ assert.equal(await evaluate(`document.querySelector('input[type="password"], #auth-mode') === null`),true,'No password or registration forms remain');
+ await evaluate(`window.__testCloud.failSignIn=true;document.querySelector('#sign-in-submit').click()`);
+ assert.match(await evaluate(`document.querySelector('#auth-message').textContent`),/Google sign-in is unavailable/);
+ assert.equal(await evaluate(`document.querySelector('#sign-in-submit').disabled`),false,'Sign-in can be retried after failure');
+ await evaluate(`window.__testCloud.failSignIn=false;document.querySelector('#sign-in-submit').click()`);
+ await new Promise(resolve=>setTimeout(resolve,100));
+ const run=async code=>{const result=await evaluate(`(async()=>{${code};await new Promise(resolve=>setTimeout(resolve,60));return document.querySelector('#error').textContent;})()`);assert.equal(result,'');};
  await run(`document.querySelector('#groups-toggle').click()`);
  assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),true);
  await run(`document.querySelector('#close-groups').click()`);
@@ -64,7 +75,8 @@ async function main(){
  assert.equal(await evaluate(`document.querySelector('#payments-panel').hidden`),false);
  await run(`document.querySelector('[data-undo]').click();document.querySelector('#submit').click()`);
  assert.equal(await evaluate(`document.querySelector('#payments-panel').hidden`),true);
- await run(`document.querySelector('#expenses-tab').click();document.querySelector('#manage-members').click();document.querySelector('#new-members').value='Erin, Finn';document.querySelector('#submit').click();document.querySelector('[data-edit]').click()`);
+ await run(`document.querySelector('#expenses-tab').click();document.querySelector('#manage-members').click();document.querySelector('#new-members').value='Erin, Finn';document.querySelector('#submit').click()`);
+ await run(`document.querySelector('[data-edit]').click()`);
  assert.equal(await evaluate(`document.querySelectorAll('#member-checks input[type=checkbox]').length`),5);
  assert.equal(await evaluate(`document.querySelectorAll('#member-checks input[type=checkbox]:checked').length`),3,'Existing selections are preserved');
  await run(`document.querySelector('#select-all-members').click();document.querySelector('#submit').click()`);
@@ -98,6 +110,46 @@ async function main(){
  await call('Page.reload',{},sessionId);
  for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate('document.readyState === "complete" && !!document.querySelector("[data-delete]")'))break;}
  assert.equal(await evaluate(`document.querySelectorAll('#expenses .expense-row').length`),1,'Saved expense survives reload');
+ await run(`document.querySelector('#manage-access').click()`);
+ assert.match(await evaluate(`document.querySelector('#fields').textContent`),/No sign-in/);
+ const oldLink = await evaluate(`document.querySelector('#invite-link').value`);
+ assert.match(new URL(oldLink).hash, /^#edit=[0-9a-f]{64}$/,'Shared link contains an unguessable edit key');
+ await run(`document.querySelector('#replace-group-link').click();document.querySelector('#submit').click()`);
+ const sharedGroupLink = await evaluate(`document.querySelector('#invite-link').value`);
+ assert.notEqual(sharedGroupLink,oldLink,'Owner can replace an edit link');
+ await run(`document.querySelector('#submit').click()`);
+ await evaluate(`window.__testCloud.setAccount(null)`);
+ await call('Page.navigate',{url:oldLink},sessionId);
+ for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.querySelector('#group-link-message')?.textContent.includes('invalid')`))break;}
+ assert.equal(await evaluate(`document.querySelector('#group-workspace').hidden`),true,'Replaced link does not expose the group');
+ await call('Page.navigate',{url:sharedGroupLink},sessionId);
+ for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate('document.readyState === "complete" && !!document.querySelector("[data-edit]")'))break;}
+ assert.equal(await evaluate(`document.querySelector('#auth-panel').hidden`),true,'Link visitors need no sign-in');
+ assert.equal(await evaluate(`document.querySelector('#page-title').textContent`),'Browser test','Anonymous visitor opens the shared group');
+ assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'1','Only the linked group is shown');
+ assert.equal(await evaluate(`document.querySelector('#group-options').hidden`),true,'Destructive group administration remains owner-only');
+ assert.equal(await evaluate(`document.querySelector('#manage-members').hidden`),false,'Link visitors can manage participant names');
+ await run(`document.querySelector('[data-edit]').click();document.querySelector('#description').value='Edited through link';document.querySelector('#submit').click()`);
+ assert.match(await evaluate(`document.querySelector('#expenses').textContent`),/Edited through link/,'Anonymous edits are saved');
+ await call('Page.reload',{},sessionId);
+ for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.querySelector('#expenses')?.textContent.includes('Edited through link')`))break;}
+ assert.match(await evaluate(`document.querySelector('#expenses').textContent`),/Edited through link/,'Anonymous edits survive reload');
+ await evaluate(`window.__testCloud.setAccount(window.__testCloud.owner)`);
+ const accountUrl = new URL(sharedGroupLink); accountUrl.hash=''; accountUrl.search='';
+ await call('Page.navigate',{url:accountUrl.href},sessionId);
+ for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate('document.readyState === "complete" && !!document.querySelector("[data-edit]")'))break;}
+ await run(`document.querySelector('[data-edit]').click()`);
+ await evaluate(`window.__testCloud.failNext=true;document.querySelector('#description').value='Unsaved';document.querySelector('#submit').click()`);
+ await new Promise(resolve=>setTimeout(resolve,100));
+ assert.equal(await evaluate(`document.querySelector('#dialog').open`),true,'Failed cloud writes keep form open');
+ assert.match(await evaluate(`document.querySelector('#error').textContent`),/Group changed/);
+ await evaluate(`document.querySelector('#cancel').click()`);
+ await evaluate(`window.__testCloud.setAccount({id:'outsider',email:'outsider@example.com'})`);
+ await new Promise(resolve=>setTimeout(resolve,100));
+ assert.equal(await evaluate(`document.querySelectorAll('#expenses .expense-row').length`),0,'Account switch clears old DOM');
+ assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'0','Another account sees no groups');
+ await evaluate(`window.__testCloud.setAccount(window.__testCloud.owner)`);
+ await new Promise(resolve=>setTimeout(resolve,100));
  assert.equal(await evaluate(`document.querySelectorAll('#create-group').length`),1);
  await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true},sessionId);
  assert.equal(await evaluate(`document.documentElement.scrollWidth <= window.innerWidth`),true,'Mobile layout fits viewport');
@@ -130,8 +182,24 @@ async function main(){
  await call('Page.reload',{},sessionId);
  for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.readyState==='complete' && !document.querySelector('#welcome').hidden`))break;}
  assert.equal(await evaluate(`document.querySelector('#welcome').hidden`),false,'Deleted group does not return after reload');
+ await evaluate(`localStorage.setItem('gather-expenses-v2',JSON.stringify({groups:[{id:'00000000-0000-4000-8000-000000000099',name:'Legacy group',members:[{id:'a',name:'Alex'},{id:'b',name:'Bea'}],expenses:[],payments:[]}]}))`);
+ await call('Page.reload',{},sessionId);
+ for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.readyState==='complete' && !document.querySelector('#import-groups').hidden`))break;}
+ assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'0','Legacy data is never silently loaded into an account');
+ await run(`document.querySelector('#groups-toggle').click();document.querySelector('#import-groups').click()`);
+ assert.match(await evaluate(`document.querySelector('#fields').textContent`),/owner@example.com/,'Import names the receiving account');
+ await run(`document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'1','Explicit import saves a private cloud group');
+ await run(`document.querySelector('#groups-toggle').click();document.querySelector('#import-groups').click();document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'1','Import retries do not duplicate groups');
+ assert.equal(await evaluate(`JSON.parse(localStorage.getItem('gather-expenses-v2')).groups.length`),1,'Import preserves the original backup');
+ await run(`document.querySelector('#groups-toggle').click();document.querySelector('#sign-out').click()`);
+ assert.equal(await evaluate(`document.querySelector('#auth-panel').hidden`),false,'Sign-out returns to sign-in');
+ assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),false,'Sign-out closes private dialogs');
+ assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'0','Sign-out hides cloud and legacy groups');
+ assert.equal(await evaluate(`document.querySelector('#sign-in-submit').hidden`),false,'Google sign-in is available after sign-out');
  assert.deepEqual(errors,[]);
- console.log('PASS: browser expense workflows, all split methods, closing and reopening groups, deletion confirmation, and persistence after reload.');
+ console.log('PASS: browser expense workflows with a cloud fixture, failed writes, account isolation, sign-out, and persistence after reload.');
  }finally{
    clearInterval(keepAlive);
    clearTimeout(deadline);

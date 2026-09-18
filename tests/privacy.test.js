@@ -1,0 +1,222 @@
+const {test} = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const {PGlite} = require('@electric-sql/pglite');
+
+test('Supabase privacy rules execute in Postgres for owner, invitee, outsider and revoked member', async t => {
+  const db = new PGlite();
+  t.after(() => db.close());
+  await db.exec(`
+    create role anon; create role authenticated;
+    create schema auth;
+    create table auth.users(id uuid primary key, email text, email_confirmed_at timestamptz);
+    create function auth.uid() returns uuid language sql stable as
+      $$select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid$$;
+    grant usage on schema auth, public to anon, authenticated;
+    grant execute on function auth.uid() to anon, authenticated;
+    insert into auth.users values
+      ('00000000-0000-4000-8000-000000000001','owner@example.com',now()),
+      ('00000000-0000-4000-8000-000000000002','member@example.com',now()),
+      ('00000000-0000-4000-8000-000000000003','outsider@example.com',now()),
+      ('00000000-0000-4000-8000-000000000004','unverified@example.com',null);
+  `);
+  await db.exec(fs.readFileSync(path.join(__dirname, '../supabase/migrations/202609070001_private_groups.sql'), 'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname, '../supabase/migrations/202609160002_group_edit_links.sql'), 'utf8'));
+  const uid = n => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+  const login = async n => {
+    await db.exec('reset role');
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)", [n ? uid(n) : '']);
+    await db.exec(`set role ${n ? 'authenticated' : 'anon'}`);
+  };
+  const rpc = async (fn, args = []) => (await db.query(`select to_jsonb(public.gather_${fn}(${args.map((_,i) => '$'+(i+1)).join(',')})) as result`, args)).rows[0].result;
+  const read = async table => (await db.query(`select * from public.gather_${table}`)).rows;
+  const doc = {id:uid(10), name:'Private holiday', members:[{id:'a',name:'Owner'},{id:'b',name:'Member'}], expenses:[], payments:[]};
+  let invitation;
+  await t.test('anonymous cannot read tables or call write functions', async () => {
+    await login(null);
+    for (const table of ['groups','memberships','invitations']) await assert.rejects(read(table), /permission denied/);
+    await assert.rejects(rpc('create_group',[doc]), /permission denied/);
+  });
+  await t.test('verified creator owns a group; malformed documents are rejected', async () => {
+    await login(4);
+    await assert.rejects(rpc('create_group',[doc]), /verified email/);
+    await login(1);
+    await assert.rejects(rpc('create_group',[{...doc,name:null}]), /valid_document/);
+    const row = await rpc('create_group',[doc]);
+    assert.equal(row.owner_id,uid(1)); assert.equal(row.version,1);
+    assert.equal((await read('groups')).length,1);
+    for (const table of ['groups','memberships','invitations']) {
+      await assert.rejects(db.exec(`delete from public.gather_${table}`), /permission denied/);
+    }
+    await assert.rejects(db.query('update public.gather_groups set owner_id = $1',[uid(3)]), /permission denied/);
+  });
+  await t.test('knowing a group ID grants no read or write access', async () => {
+    await login(3);
+    assert.deepEqual(await read('groups'),[]);
+    assert.deepEqual(await read('memberships'),[]);
+    await assert.rejects(rpc('save_group',[doc.id,doc,1]), /unavailable/);
+    await assert.rejects(rpc('delete_group',[doc.id,1]), /owner/);
+    await assert.rejects(rpc('invite',[doc.id,'outsider@example.com']), /owner/);
+    await assert.rejects(rpc('access_list',[doc.id]), /owner/);
+    await assert.rejects(db.query('insert into public.gather_memberships values ($1,$2)',[doc.id,uid(3)]), /permission denied/);
+    await assert.rejects(rpc('create_group',[doc]), /duplicate key/);
+  });
+  await t.test('invitations are email bound and confer no access before acceptance', async () => {
+    await login(1); invitation = await rpc('invite',[doc.id,' MEMBER@example.com ']);
+    assert.equal(invitation.email,'member@example.com');
+    await login(3);
+    assert.deepEqual(await read('invitations'),[]);
+    await assert.rejects(rpc('accept_invitation',[invitation.id]), /invited email/);
+    await login(2);
+    assert.equal((await read('invitations')).length,1);
+    assert.deepEqual(await read('groups'),[]);
+    assert.equal(await rpc('accept_invitation',[invitation.id]),doc.id);
+    assert.equal((await read('groups')).length,1);
+    await assert.rejects(rpc('accept_invitation',[invitation.id]), /unavailable/);
+  });
+  await t.test('members can save expenses but not change ownership, participants or access', async () => {
+    await login(2);
+    doc.expenses.push({id:'expense-1',name:'Dinner',amount:10000,payer:'a',members:['a','b'],date:'2026-09-07',category:'Other'});
+    assert.equal((await rpc('save_group',[doc.id,doc,1])).version,2);
+    await assert.rejects(rpc('save_group',[doc.id,{...doc,members:[]},2]), /owner/);
+    await assert.rejects(rpc('save_group',[doc.id,{...doc,closed:true},2]), /owner/);
+    await assert.rejects(rpc('delete_group',[doc.id,2]), /owner/);
+    await assert.rejects(rpc('revoke',[doc.id,uid(1),null]), /owner/);
+    await assert.rejects(rpc('invite',[doc.id,'outsider@example.com']), /owner/);
+  });
+  await t.test('version check prevents lost updates and stale deletion', async () => {
+    await login(1);
+    await assert.rejects(rpc('save_group',[doc.id,doc,1]), /changed/);
+    await assert.rejects(rpc('save_group',[doc.id,doc,null]), /changed/);
+    await assert.rejects(rpc('delete_group',[doc.id,null]), /changed/);
+    await assert.rejects(rpc('delete_group',[doc.id,1]), /changed/);
+    assert.equal((await read('groups'))[0].document.expenses.length,1);
+  });
+  await t.test('revocation immediately blocks reads, writes and pending reentry', async () => {
+    await login(1);
+    const pending = await rpc('invite',[doc.id,'member@example.com']);
+    await rpc('revoke',[doc.id,uid(2),null]);
+    await login(2);
+    assert.deepEqual(await read('groups'),[]);
+    await assert.rejects(rpc('save_group',[doc.id,doc,2]), /unavailable/);
+    await assert.rejects(rpc('accept_invitation',[pending.id]), /unavailable/);
+  });
+  await t.test('expired/cancelled invitations cannot be accepted and cannot be renewed by invitee', async () => {
+    await login(1);
+    const expired = await rpc('invite',[doc.id,'member@example.com']);
+    await db.exec('reset role');
+    await db.query("update public.gather_invitations set expires_at = now() - interval '1 day' where id = $1",[expired.id]);
+    await login(2);
+    assert.deepEqual(await read('invitations'),[]);
+    await assert.rejects(rpc('accept_invitation',[expired.id]), /expired/);
+    await assert.rejects(db.query("update public.gather_invitations set expires_at = now() + interval '1 day'"), /permission denied/);
+    await login(1);
+    const renewed = await rpc('invite',[doc.id,'member@example.com']);
+    assert.notEqual(renewed.id,expired.id);
+    await rpc('revoke',[doc.id,null,renewed.id]);
+    await login(2);
+    await assert.rejects(rpc('accept_invitation',[renewed.id]), /unavailable/);
+  });
+  await t.test('closed groups are read only until owner reopens them', async () => {
+    await login(1);
+    assert.equal((await rpc('save_group',[doc.id,{...doc,closed:true},2])).version,3);
+    await assert.rejects(rpc('save_group',[doc.id,{...doc,closed:true,name:'Changed'},3]), /Reopen/);
+    assert.equal((await rpc('save_group',[doc.id,{...doc,closed:false},3])).version,4);
+  });
+  await t.test('acceptance checks the current verified email, not stale claims', async () => {
+    await login(1);
+    const invite = await rpc('invite',[doc.id,'member@example.com']);
+    await db.exec('reset role');
+    await db.query('update auth.users set email = $1 where id = $2',['changed@example.com',uid(2)]);
+    await login(2);
+    assert.deepEqual(await read('invitations'),[]);
+    await assert.rejects(rpc('accept_invitation',[invite.id]), /invited email/);
+    await db.exec('reset role');
+    await db.query('update auth.users set email = $1 where id = $2',['member@example.com',uid(2)]);
+  });
+  await t.test('edit links allow anonymous edits of only their group and can be replaced', async () => {
+    await login(1);
+    let linked = {...doc, id:uid(20), name:'Link-only group'};
+    await rpc('create_group',[linked]);
+    const token = await rpc('edit_link',[linked.id,false]);
+    assert.match(token,/^[0-9a-f]{64}$/);
+    await db.exec('reset role');
+    await db.exec(fs.readFileSync(path.join(__dirname, '../supabase/migrations/202609160002_group_edit_links.sql'), 'utf8'));
+    await login(1);
+    assert.equal(await rpc('edit_link',[linked.id,false]),token,'Opening share dialog preserves links');
+    await login(null);
+    await assert.rejects(db.exec('select * from gather_private.edit_links'),/permission denied/);
+    await assert.rejects(rpc('edit_link',[linked.id,true]),/permission denied/);
+    await assert.rejects(rpc('read_link',[linked.id]),/invalid/);
+    await assert.rejects(rpc('read_link',['']),/invalid/);
+    assert.equal((await rpc('read_link',[token])).id,linked.id);
+    assert.equal((await rpc('read_link',[token])).owner_id,undefined,'Link reads omit owner identity');
+    linked = {...linked, members:[...linked.members,{id:'c',name:'Guest'}],payments:[{id:'p1',from:'a',to:'b',amount:100}]};
+    assert.equal((await rpc('save_link',[token,linked,1])).version,2);
+    await assert.rejects(rpc('save_link',[token,linked,1]),/changed/);
+    await assert.rejects(rpc('save_link',[token,linked,null]),/changed/);
+    await assert.rejects(rpc('save_link',[token,{...linked,id:doc.id},2]),/valid_document/);
+    await assert.rejects(rpc('save_link',[token,{...linked,closed:true},2]),/owner/);
+    await assert.rejects(rpc('delete_group',[linked.id,2]),/permission denied/);
+    await login(3);
+    assert.deepEqual(await read('groups'),[],'Link does not create account membership');
+    await assert.rejects(rpc('edit_link',[linked.id,true]),/owner/);
+    assert.equal((await rpc('read_link',[token])).id,linked.id,'Signed-in outsiders may also use the link');
+    await login(1);
+    const replacement = await rpc('edit_link',[linked.id,true]);
+    assert.notEqual(replacement,token);
+    await rpc('save_group',[linked.id,{...linked,closed:true},2]);
+    await login(null);
+    await assert.rejects(rpc('read_link',[token]),/invalid/);
+    await assert.rejects(rpc('save_link',[token,linked,2]),/invalid/);
+    assert.equal((await rpc('read_link',[replacement])).document.closed,true);
+    await assert.rejects(rpc('save_link',[replacement,{...linked,closed:true},3]),/closed/);
+    await login(1);
+    await rpc('delete_group',[linked.id,3]);
+    await login(null);
+    await assert.rejects(rpc('read_link',[replacement]),/invalid/);
+  });
+  await t.test('owner deletion removes invitations and membership', async () => {
+    await login(1);
+    const invite = await rpc('invite',[doc.id,'member@example.com']);
+    await login(2); await rpc('accept_invitation',[invite.id]);
+    await login(1); await rpc('invite',[doc.id,'outsider@example.com']);
+    await rpc('delete_group',[doc.id,4]);
+    assert.deepEqual(await read('groups'),[]);
+    assert.deepEqual(await read('invitations'),[]);
+    assert.deepEqual(await read('memberships'),[]);
+  });
+  await t.test('creator-only migration retires member accounts while preserving groups and edit links', async () => {
+    await login(1);
+    const group = {...doc,id:uid(30),name:'Creator and link access'};
+    await rpc('create_group',[group]);
+    const token = await rpc('edit_link',[group.id,false]);
+    const invite = await rpc('invite',[group.id,'member@example.com']);
+    await login(2);
+    await rpc('accept_invitation',[invite.id]);
+    assert.equal((await read('groups')).length,1);
+    await db.exec('reset role');
+    const cleanup = fs.readFileSync(path.join(__dirname, '../supabase/migrations/202609160003_creator_and_link_access.sql'),'utf8');
+    await db.exec(cleanup);
+    await db.exec(cleanup);
+    assert.equal((await db.query('select count(*)::int as n from public.gather_memberships')).rows[0].n,1,'Historical records are preserved');
+    await login(2);
+    assert.deepEqual(await read('groups'),[],'Former member account alone has no access');
+    await assert.rejects(rpc('save_group',[group.id,group,1]),/unavailable/);
+    await assert.rejects(read('memberships'),/permission denied/);
+    await assert.rejects(read('invitations'),/permission denied/);
+    await assert.rejects(rpc('accept_invitation',[invite.id]),/does not exist/);
+    await assert.rejects(rpc('invite',[group.id,'member@example.com']),/does not exist/);
+    await assert.rejects(rpc('access_list',[group.id]),/does not exist/);
+    await assert.rejects(rpc('revoke',[group.id,uid(2),null]),/does not exist/);
+    await login(null);
+    assert.equal((await rpc('read_link',[token])).id,group.id);
+    assert.equal((await rpc('save_link',[token,{...group,name:'Guest edit'},1])).version,2);
+    await login(1);
+    assert.equal((await read('groups'))[0].document.name,'Guest edit');
+    assert.equal(await rpc('edit_link',[group.id,false]),token,'Migration preserves existing links');
+    assert.equal((await rpc('save_group',[group.id,group,2])).version,3);
+    await rpc('delete_group',[group.id,3]);
+  });
+});

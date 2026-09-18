@@ -3,9 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "node --watch server/index.js",
-    "start": "node server/index.js",
-    "test": "node --test tests/expense-logic.test.js",
-    "test:browser": "node tests/browser.test-runner.js"
+    "dev": "npm run build && node --watch server/index.js",
+    "start": "npm run build && node server/index.js",
+    "test": "node --test tests/*.test.js",
+    "test:browser": "npm run build && node tests/browser.test-runner.js",
+    "build": "node --env-file-if-exists=.env scripts/build.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "esbuild": "^0.28.2"
   }
 }

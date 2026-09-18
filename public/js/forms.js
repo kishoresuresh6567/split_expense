@@ -3,20 +3,26 @@ const Forms = (() => {
   const $ = selector => document.querySelector(selector);
   const {escape, money} = Views;
   const categories = ['Food & drinks', 'Groceries', 'Travel', 'Stay', 'Activities', 'Other'];
+  let generation = 0;
   const today = () => {
     const date = new Date();
     return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
   };
-  function close() { $('#dialog').close(); }
+  function close() { generation++; $('#dialog').close(); }
   function open(title, html, save, label = 'Save') {
+    const opened = ++generation;
     $('#dialog-title').textContent = title;
     $('#fields').innerHTML = html;
     $('#error').textContent = '';
     $('#submit').textContent = label;
-    $('#form').onsubmit = event => {
+    $('#submit').disabled = false;
+    $('#form').onsubmit = async event => {
       event.preventDefault();
-      try { save(new FormData(event.target)); close(); }
-      catch (error) { $('#error').textContent = error.message; }
+      $('#error').textContent = '';
+      $('#submit').disabled = true;
+      try { await save(new FormData(event.target)); if (opened === generation) close(); }
+      catch (error) { if (opened === generation) $('#error').textContent = error.message; }
+      finally { if (opened === generation || !$('#dialog').open) $('#submit').disabled = false; }
     };
     $('#dialog').showModal();
   }

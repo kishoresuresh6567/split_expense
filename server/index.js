@@ -1,13 +1,14 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const publicDirectory = path.join(__dirname, '..', 'public');
+const publicDirectory = path.join(__dirname, '..', 'dist');
 const files = {
   '/': 'index.html',
   '/index.html': 'index.html',
   '/assets/gather-logo.svg': 'assets/gather-logo.svg',
   '/css/styles.css': 'css/styles.css',
   '/js/app.js': 'js/app.js',
+  '/js/cloud.js': 'js/cloud.js',
   '/js/expense-logic.js': 'js/expense-logic.js',
   '/js/views.js': 'js/views.js',
   '/js/forms.js': 'js/forms.js'

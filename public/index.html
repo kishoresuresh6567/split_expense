@@ -11,16 +11,28 @@
 </head>
 <body>
   <header class="app-bar">
-    <button type="button" id="groups-toggle" class="menu-button" aria-label="Show all groups" aria-controls="groups-drawer" aria-expanded="false"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <button type="button" id="groups-toggle" class="menu-button" aria-label="Show my groups" aria-controls="groups-drawer" aria-expanded="false" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
     <div class="brand"><img class="brand-logo" src="./assets/gather-logo.svg" alt="" width="36" height="36"><span>Gather</span></div>
   </header>
   <dialog class="sidebar" id="groups-drawer" aria-labelledby="groups-heading">
     <div class="sidebar-heading"><h2 id="groups-heading">Groups <span id="group-count">0</span></h2><button type="button" id="close-groups" class="close-button" aria-label="Close groups">×</button></div>
     <button class="primary" id="create-group">+ Create group</button>
     <nav id="group-nav" aria-label="Groups"></nav>
-    <p class="storage-note">Saved in this browser.<br>No account required.</p>
+    <p class="storage-note">Shared edit links give access to their group.</p>
+    <p id="account-email" class="storage-note"></p>
+    <button class="secondary" id="refresh-groups">Refresh groups</button>
+    <button class="secondary" id="import-groups" hidden>Import browser groups</button>
+    <button class="secondary" id="sign-out">Sign out</button>
   </dialog>
   <main>
+    <section id="auth-panel" class="welcome">
+      <h1>Create and share a group</h1>
+      <p id="auth-description">Sign in to create and manage your groups. Anyone with a shared edit link can join without signing in.</p>
+      <button type="button" class="primary" id="sign-in-submit" hidden>Continue with Google</button>
+      <p id="auth-message" role="status"></p>
+    </section>
+    <p id="group-link-message" role="status"></p>
+    <a id="leave-link" href="./" hidden>Go to my account</a>
     <section id="welcome" class="welcome" hidden>
       <span class="welcome-icon">÷</span>
       <h1>Split expenses with your group</h1>
@@ -31,6 +43,7 @@
       <header class="page-heading">
         <div><p class="eyebrow">GROUP</p><h1 id="page-title"></h1><p id="page-description"></p></div>
         <div class="group-controls">
+          <button class="secondary" id="manage-access">Share group</button>
           <button class="secondary" id="manage-members">Manage members</button>
           <details id="group-options" class="group-options">
             <summary class="secondary">Group options ⌄</summary>
@@ -72,6 +85,7 @@
   <script src="./js/expense-logic.js"></script>
   <script src="./js/views.js"></script>
   <script src="./js/forms.js"></script>
+  <script src="./js/cloud.js"></script>
   <script src="./js/app.js"></script>
 </body>
 </html>

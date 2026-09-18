@@ -5,9 +5,28 @@
   const STORAGE_KEY = 'gather-expenses-v2';
   let state = {groups: []};
   let selectedGroupId = null;
+  const linkedGroupId = new URL(location.href).searchParams.get('group');
+  const linkToken = new URLSearchParams(location.hash.slice(1)).get('edit');
+  window.addEventListener('hashchange', () => {
+    if (new URLSearchParams(location.hash.slice(1)).get('edit') !== linkToken) location.reload();
+  });
+  const groupLink = (id, token) => {
+    const url = new URL(location.href);
+    url.search = '';
+    url.hash = '';
+    url.searchParams.set('group', id);
+    url.hash = new URLSearchParams({edit:token}).toString();
+    return url.href;
+  };
   let section = 'expenses';
   let search = '';
   let toastTimer;
+  let user = null;
+  let records = new Map();
+  let saving = false;
+  let loading = false;
+  let authEpoch = 0;
+  const isOwner = group => Boolean(user && records.get(group?.id)?.owner_id === user.id);
 
   const newId = () => typeof crypto.randomUUID === 'function' ? crypto.randomUUID()
     : Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -28,17 +47,50 @@
     return parsed;
   }
 
-  function commit(change, message) {
+  async function commit(change, message) {
+    if (!user && !linkToken) throw Error('Sign in or open a group edit link first.');
+    if (saving || loading) throw Error('Please wait for the current request to finish.');
     const next = structuredClone(state);
     change(next);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
-    catch { throw Error('Could not save. Browser storage is unavailable or full.'); }
-    state = next;
-    render();
-    if (message) notify(message);
+    const before = new Map(state.groups.map(group => [group.id, group]));
+    const changed = next.groups.filter(group => JSON.stringify(group) !== JSON.stringify(before.get(group.id)));
+    const removed = state.groups.filter(group => !next.groups.some(item => item.id === group.id));
+    if (changed.length + removed.length !== 1) throw Error('Save one group at a time.');
+    const epoch = authEpoch;
+    saving = true;
+    try {
+      if (removed.length) await Cloud.remove(removed[0].id, records.get(removed[0].id).version);
+      else {
+        const group = changed[0], record = records.get(group.id);
+        const saved = linkToken ? await Cloud.saveLink(linkToken, group, record.version)
+          : record ? await Cloud.save(group.id, group, record.version) : await Cloud.create(group);
+        if (epoch !== authEpoch) throw Error('Account changed. Sign in and refresh.');
+        records.set(group.id, saved);
+      }
+      if (epoch !== authEpoch) throw Error('Account changed. Sign in and refresh.');
+      state = next;
+      render();
+      if (message) notify(message);
+    } catch (error) {
+      if (epoch !== authEpoch) throw error;
+      // Discard stale/revoked data, then fetch only what the server still permits.
+      state = {groups: []};
+      records.clear();
+      render();
+      saving = false;
+      await refresh().catch(() => {});
+      throw error;
+    } finally {
+      saving = false;
+      if (epoch !== authEpoch && (user || linkToken)) refresh().catch(error => notify(error.message));
+    }
   }
 
   function render() {
+    $('#groups-toggle').hidden = !user && !state.groups.length;
+    $('#auth-panel').hidden = Boolean(user || linkToken);
+    $('#create-group').hidden = $('#sign-out').hidden = !user;
+    $('#leave-link').hidden = !linkToken;
     if (!currentGroup()) selectedGroupId = (state.groups.find(group => !group.closed) || state.groups[0])?.id || null;
     const group = currentGroup();
     $('#group-count').textContent = state.groups.length;
@@ -46,12 +98,17 @@
     const closedGroups = state.groups.filter(group => group.closed);
     $('#group-nav').innerHTML = `<h3 class="menu-section-heading">Active groups <span>${activeGroups.length}</span></h3><div id="active-group-nav">${Views.groups(activeGroups, selectedGroupId) || '<p class="menu-empty">No active groups.</p>'}</div>
       <h3 class="menu-section-heading">Closed groups <span>${closedGroups.length}</span></h3><div id="closed-group-nav">${Views.groups(closedGroups, selectedGroupId) || '<p class="menu-empty">No closed groups.</p>'}</div>`;
-    $('#welcome').hidden = Boolean(group);
+    $('#welcome').hidden = !user || Boolean(group);
     $('#group-workspace').hidden = !group;
-    if (!group) return;
+    if (!group) {
+      for (const id of ['expenses','stats','payments','settlements','page-title','page-description']) $(`#${id}`).replaceChildren();
+      return;
+    }
     $('#group-options').open = false;
     $('#closed-group-note').hidden = !group.closed;
-    $('#manage-members').hidden = Boolean(group.closed);
+    $('#manage-members').hidden = Boolean(group.closed) || (!isOwner(group) && !linkToken);
+    $('#manage-access').hidden = !isOwner(group);
+    $('#group-options').hidden = !isOwner(group);
     $('#add-expense').hidden = Boolean(group.closed);
     $('#close-group').hidden = Boolean(group.closed);
     $('#reopen-group').hidden = !group.closed;
@@ -89,13 +146,13 @@
 
   function createGroup() {
     closeGroups();
-    Forms.group(data => {
+    Forms.group(async data => {
       const name = data.get('name').trim();
       if (!name) throw Error('Enter a group name.');
       const members = parseMembers(data.get('members'));
       if (members.length < 2) throw Error('Add at least two members.');
       const group = {id: newId(), name, icon: '👥', members, expenses: [], payments: []};
-      commit(next => next.groups.push(group), 'Group created.');
+      await commit(next => next.groups.push(group), 'Group created.');
       selectedGroupId = group.id;
       section = 'expenses';
       search = '';
@@ -107,9 +164,9 @@
   function manageMembers() {
     const group = currentGroup();
     if (group.closed) return notify('Reopen this group before making changes.');
-    Forms.members(group, data => {
+    Forms.members(group, async data => {
       const members = parseMembers(data.get('members'), currentGroup().members);
-      commit(next => next.groups.find(item => item.id === group.id).members.push(...members), 'Members added.');
+      await commit(next => next.groups.find(item => item.id === group.id).members.push(...members), 'Members added.');
     });
   }
 
@@ -118,7 +175,7 @@
     if (group.closed) return notify('Reopen this group before making changes.');
     const existing = expenseId ? group.expenses.find(expense => expense.id === expenseId) : null;
     if (expenseId && !existing) throw Error('This expense no longer exists.');
-    Forms.expense(group, existing, data => {
+    Forms.expense(group, existing, async data => {
       const name = data.get('name').trim();
       const amount = Math.round(Number(data.get('amount')) * 100);
       const members = data.getAll('member');
@@ -128,7 +185,7 @@
       if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 10000000000) throw Error('Enter a valid amount.');
       if (split.method === 'even') split.values = {};
       const expense = {id: existing?.id || newId(), name, amount, members, payer, split, category: data.get('category'), date: data.get('date')};
-      commit(next => {
+      await commit(next => {
         const target = next.groups.find(item => item.id === group.id);
         if (existing) {
           Split.updateExpenseSplit(target, existing.id, members, payer, split, amount);
@@ -141,7 +198,7 @@
     });
   }
 
-  function handleAction(button) {
+  async function handleAction(button) {
     const group = currentGroup();
     const {dataset} = button;
     if (group?.closed && ['edit','removeMember','delete','pay','undo'].some(key => dataset[key])) throw Error('Reopen this group before making changes.');
@@ -155,11 +212,11 @@
     } else if (dataset.edit) {
       expenseForm(dataset.edit);
     } else if (dataset.removeMember) {
-      commit(next => Split.removeMember(next.groups.find(item => item.id === group.id), dataset.removeMember), 'Member removed.');
+      await commit(next => Split.removeMember(next.groups.find(item => item.id === group.id), dataset.removeMember), 'Member removed.');
       $('#member-list').innerHTML = Views.members(currentGroup());
     } else if (dataset.delete) {
-      Forms.confirm('Delete expense?', 'This removes the expense and updates balances. Recorded repayments stay unchanged.', () => {
-        commit(next => {
+      Forms.confirm('Delete expense?', 'This removes the expense and updates balances. Recorded repayments stay unchanged.', async () => {
+        await commit(next => {
           const target = next.groups.find(item => item.id === group.id);
           target.expenses = target.expenses.filter(expense => expense.id !== dataset.delete);
         }, 'Expense deleted.');
@@ -167,12 +224,12 @@
     } else if (dataset.pay) {
       const payment = {id: newId(), from: dataset.pay, to: dataset.to, amount: Number(dataset.amount), date: Forms.today()};
       const message = `Has ${Views.memberName(group, payment.from)} paid ${Views.money(payment.amount)} to ${Views.memberName(group, payment.to)}? This records a payment; it does not transfer money.`;
-      Forms.confirm('Record repayment', message, () => {
-        commit(next => next.groups.find(item => item.id === group.id).payments.push(payment), 'Repayment recorded.');
+      Forms.confirm('Record repayment', message, async () => {
+        await commit(next => next.groups.find(item => item.id === group.id).payments.push(payment), 'Repayment recorded.');
       }, 'Confirm repayment');
     } else if (dataset.undo) {
-      Forms.confirm('Undo repayment?', 'This removes the repayment record and restores the outstanding balance.', () => {
-        commit(next => {
+      Forms.confirm('Undo repayment?', 'This removes the repayment record and restores the outstanding balance.', async () => {
+        await commit(next => {
           const target = next.groups.find(item => item.id === group.id);
           target.payments = target.payments.filter(payment => payment.id !== dataset.undo);
         }, 'Repayment removed.');
@@ -180,23 +237,23 @@
     }
   }
 
-  function changeGroupStatus(closed) {
+  async function changeGroupStatus(closed) {
     const group = currentGroup();
     $('#group-options').open = false;
     if (!closed) {
-      commit(next => { next.groups.find(item => item.id === group.id).closed = false; }, 'Group reopened.');
+      await commit(next => { next.groups.find(item => item.id === group.id).closed = false; }, 'Group reopened.');
       return;
     }
     Forms.confirm('Close group?', `Move “${group.name}” to Closed groups? All expenses, balances, and repayments will be kept. You can reopen it later. Closing does not mark unpaid balances as paid.`, () => {
-      commit(next => { next.groups.find(item => item.id === group.id).closed = true; }, 'Group moved to Closed groups.');
+      return commit(next => { next.groups.find(item => item.id === group.id).closed = true; }, 'Group moved to Closed groups.');
     }, 'Close group');
   }
 
   function deleteGroup() {
     const group = currentGroup();
     $('#group-options').open = false;
-    Forms.confirm('Delete group permanently?', `Delete “${group.name}” and all its ${group.members.length} members, ${group.expenses.length} expenses, and ${group.payments.length} repayments? This cannot be undone.`, () => {
-      commit(next => { next.groups = next.groups.filter(item => item.id !== group.id); }, 'Group deleted.');
+    Forms.confirm('Delete group permanently?', `Delete “${group.name}” and all its ${group.members.length} members, ${group.expenses.length} expenses, and ${group.payments.length} repayments? This cannot be undone.`, async () => {
+      await commit(next => { next.groups = next.groups.filter(item => item.id !== group.id); }, 'Group deleted.');
       section = 'expenses';
       search = '';
       $('#search').value = '';
@@ -204,8 +261,8 @@
     }, 'Delete group');
   }
 
-  $('#close-group').onclick = () => changeGroupStatus(true);
-  $('#reopen-group').onclick = () => changeGroupStatus(false);
+  $('#close-group').onclick = () => changeGroupStatus(true).catch(error => notify(error.message));
+  $('#reopen-group').onclick = () => changeGroupStatus(false).catch(error => notify(error.message));
   $('#delete-group').onclick = deleteGroup;
   $('#groups-toggle').onclick = () => {
     $('#groups-drawer').showModal();
@@ -227,22 +284,163 @@
   for (const name of ['expenses', 'balances']) {
     $(`#${name}-tab`).onclick = () => { section = name; render(); };
   }
-  document.addEventListener('click', event => {
+  document.addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button || button.disabled) return;
-    try { handleAction(button); }
+    try { await handleAction(button); }
     catch (error) { notify(error.message); }
   });
-  window.addEventListener('storage', event => {
-    if (event.key !== STORAGE_KEY) return;
+  // Creator accounts and shared edit links.
+  async function refresh() {
+    if ((!user && !linkToken) || saving || loading) return;
+    loading = true;
+    const epoch = authEpoch;
     try {
-      state = readState(event.newValue);
-      Forms.close();
+      if (linkToken) {
+        const row = await Cloud.readLink(linkToken);
+        if (epoch !== authEpoch) return;
+        records = new Map([[row.id, row]]);
+        state = {groups:[row.document]};
+        selectedGroupId = row.id;
+        $('#group-link-message').textContent = 'You can view and edit this group using its shared link.';
+        render();
+        return;
+      }
+      const rows = await Cloud.groups(user.id);
+      if (epoch !== authEpoch) return;
+      records = new Map(rows.map(row => [row.id, row]));
+      state = {groups: rows.map(row => row.document)};
+      if (linkedGroupId && !selectedGroupId && records.has(linkedGroupId)) selectedGroupId = linkedGroupId;
       render();
-      notify('Updated from another tab.');
+      $('#group-link-message').textContent = linkedGroupId && !records.has(linkedGroupId)
+        ? 'Ask the creator for the complete shared edit link to open this group.' : '';
+    } catch (error) {
+      if (epoch === authEpoch) {
+        state = {groups:[]}; records.clear(); render();
+        if (linkToken) {
+          Forms.close();
+          $('#fields').replaceChildren();
+          $('#group-link-message').textContent = error.message;
+        }
+      }
+      throw error;
+    } finally {
+      loading = false;
+      if (epoch !== authEpoch && (user || linkToken)) refresh().catch(error => notify(error.message));
+    }
+  }
+
+  async function manageAccess(replaceLink = false) {
+    const group = currentGroup();
+    if (!isOwner(group)) throw Error('Only the owner can manage access.');
+    const epoch = authEpoch;
+    const token = await Cloud.editLink(group.id, replaceLink);
+    if (epoch !== authEpoch) return;
+    Forms.open('Share group', `<p>Anyone with this link can view and edit expenses, repayments and participant names. No sign-in, email or membership is needed.</p>
+      <label for="invite-link">Group edit link</label>
+      <div class="share-link-row"><input id="invite-link" readonly value="${Views.escape(groupLink(group.id, token))}">
+        <button type="button" class="secondary copy-link" id="copy-group-link" aria-label="Copy group link"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copy</span></button>
+      </div>
+      <p>Share this link with the people you want to edit the group. Replacing it stops the old link from working.</p>
+      <button type="button" class="secondary" id="replace-group-link">Replace link</button>`, async () => {}, 'Done');
+    $('#invite-link').onclick = event => event.target.select();
+    $('#copy-group-link').onclick = async event => {
+      const button = event.currentTarget;
+      const input = $('#invite-link');
+      button.disabled = true;
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(input.value);
+        copied = true;
+      } catch {
+        // Support browsers where the Clipboard API is unavailable or blocked.
+        if (input.isConnected) {
+          input.focus();
+          input.select();
+          input.setSelectionRange(0, input.value.length);
+          try { copied = document.execCommand('copy'); } catch {}
+        }
+      } finally {
+        button.disabled = false;
+      }
+      if (!button.isConnected) return;
+      button.querySelector('span').textContent = copied ? 'Copied!' : 'Copy';
+      notify(copied ? 'Group link copied.' : 'Could not copy automatically. Select and copy the link above.');
+    };
+    $('#replace-group-link').onclick = () => {
+      Forms.confirm('Replace group link?', 'Anyone using the old link will need the new one.', () => manageAccess(true), 'Replace link');
+    };
+  }
+
+  $('#manage-access').onclick = () => manageAccess().catch(error => notify(error.message));
+  $('#refresh-groups').onclick = () => refresh().then(() => notify('Groups refreshed.')).catch(error => notify(error.message));
+  $('#sign-in-submit').onclick = async () => {
+    $('#sign-in-submit').disabled = true;
+    $('#auth-message').textContent = '';
+    try { await Cloud.signIn(); }
+    catch (error) { $('#auth-message').textContent = error.message; }
+    finally { $('#sign-in-submit').disabled = false; }
+  };
+  $('#sign-out').onclick = async () => {
+    try { await Cloud.signOut(); setAccount(null); }
+    catch (error) { notify(`Sign out failed: ${error.message}`); }
+  };
+  $('#import-groups').onclick = () => {
+    closeGroups();
+    try {
+      const local = readState(localStorage.getItem(STORAGE_KEY));
+      Forms.confirm('Import browser groups?', `Import ${local.groups.length} groups into ${user.email}? You will own them. Use Share group to give others an edit link. The local copy remains in this browser until you remove it.`, async () => {
+        const accountId = user.id;
+        for (const group of local.groups) {
+          if (user?.id !== accountId) throw Error('Account changed. Import stopped.');
+          if (records.has(group.id)) {
+            if (!isOwner(group)) throw Error('This group already belongs to another account.');
+            continue;
+          }
+          // Preserve IDs so retrying after a partial import does not duplicate data.
+          await commit(next => next.groups.push(group));
+        }
+        notify('Groups imported. Use Share group to get an edit link.');
+      }, 'Import into my account');
     } catch (error) { notify(error.message); }
-  });
-  try { state = readState(localStorage.getItem(STORAGE_KEY)); }
-  catch { notify('Saved data could not be read. No saved data has been changed.'); }
+  };
+
+  function setAccount(session) {
+    const nextUser = session?.user || null;
+    if (nextUser?.id === user?.id && nextUser?.email === user?.email) return;
+    authEpoch++;
+    user = nextUser;
+    $('#auth-message').textContent = '';
+    state = {groups:[]}; records.clear(); selectedGroupId = null;
+    Forms.close(); closeGroups();
+    // Remove account data from hidden DOM as well as the visible workspace.
+    for (const id of ['fields','expenses','stats','payments','settlements','page-title','page-description']) $(`#${id}`).replaceChildren();
+    $('#group-link-message').textContent = '';
+    $('#account-email').textContent = user?.email || '';
+    $('#import-groups').hidden = true;
+    if (user) {
+      try { $('#import-groups').hidden = !readState(localStorage.getItem(STORAGE_KEY)).groups.length; } catch {}
+    }
+    render();
+    // Do not call Supabase APIs from inside the synchronous Auth callback.
+    if (user) setTimeout(() => refresh().catch(error => notify(error.message)), 0);
+  }
   render();
+  if (linkedGroupId && !linkToken) $('#auth-description').textContent = 'Creators can sign in below. To open a shared group without signing in, ask for its complete edit link.';
+  if (!window.Cloud?.configured) {
+    $('#auth-description').textContent = 'Sign-in is not available yet. Please contact the app owner. Existing browser data has not been changed.';
+    if (linkToken) $('#group-link-message').textContent = 'Group access is not configured yet. Please contact the app owner.';
+  } else if (linkToken) {
+    $('#group-link-message').textContent = 'Opening shared group…';
+    refresh().catch(error => notify(error.message));
+  } else {
+    $('#sign-in-submit').hidden = false;
+    Cloud.watch(session => setAccount(session));
+    const initialEpoch = authEpoch;
+    Cloud.session().then(session => { if (initialEpoch === authEpoch) setAccount(session); }).catch(error => { $('#auth-message').textContent = error.message; });
+  }
+  if (window.Cloud?.configured) {
+    window.addEventListener('focus', () => { if (!$('#dialog').open) refresh().catch(error => notify(error.message)); });
+    setInterval(() => { if ((user || linkToken) && !document.hidden && !$('#dialog').open) refresh().catch(error => notify(error.message)); }, 30000);
+  }
 })();

@@ -21,7 +21,7 @@
     },
     owner,
     failNext:false,
-    groups:async () => load().filter(row => row.owner_id === account?.id),
+    groups:async () => load().filter(row => row.owner_id === account?.id || row.document.members.some(member => member.email === account?.email)),
     editLink:async (gid, replace = false) => {
       const links = JSON.parse(sessionStorage.getItem('gather-test-links') || '{}');
       if (!links[gid] || replace) links[gid] = crypto.randomUUID().replaceAll('-','') + crypto.randomUUID().replaceAll('-','');
@@ -29,6 +29,7 @@
       return links[gid];
     },
     readLink:async token => {
+      if (!account) throw Error('Sign in with Google first.');
       const links = JSON.parse(sessionStorage.getItem('gather-test-links') || '{}');
       const gid = Object.keys(links).find(id => links[id] === token);
       const row = load().find(item => item.id === gid);

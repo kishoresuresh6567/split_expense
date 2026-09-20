@@ -7,6 +7,7 @@
   let selectedGroupId = null;
   const linkedGroupId = new URL(location.href).searchParams.get('group');
   const linkToken = new URLSearchParams(location.hash.slice(1)).get('edit');
+  const pendingLinkKey = 'gather-pending-sign-in-link';
   window.addEventListener('hashchange', () => {
     if (new URLSearchParams(location.hash.slice(1)).get('edit') !== linkToken) location.reload();
   });
@@ -48,7 +49,7 @@
   }
 
   async function commit(change, message) {
-    if (!user && !linkToken) throw Error('Sign in or open a group edit link first.');
+    if (!user) throw Error('Sign in with Google first.');
     if (saving || loading) throw Error('Please wait for the current request to finish.');
     const next = structuredClone(state);
     change(next);
@@ -88,7 +89,7 @@
 
   function render() {
     $('#groups-toggle').hidden = !user && !state.groups.length;
-    $('#auth-panel').hidden = Boolean(user || linkToken);
+    $('#auth-panel').hidden = Boolean(user);
     $('#create-group').hidden = $('#sign-out').hidden = !user;
     $('#leave-link').hidden = !linkToken;
     if (!currentGroup()) selectedGroupId = (state.groups.find(group => !group.closed) || state.groups[0])?.id || null;
@@ -106,7 +107,7 @@
     }
     $('#group-options').open = false;
     $('#closed-group-note').hidden = !group.closed;
-    $('#manage-members').hidden = Boolean(group.closed) || (!isOwner(group) && !linkToken);
+    $('#manage-members').hidden = Boolean(group.closed) || !isOwner(group);
     $('#manage-access').hidden = !isOwner(group);
     $('#group-options').hidden = !isOwner(group);
     $('#add-expense').hidden = Boolean(group.closed);
@@ -134,22 +135,33 @@
     if (group.closed) document.querySelectorAll('[data-edit], [data-delete], [data-pay], [data-undo]').forEach(button => button.hidden = true);
   }
 
-  function parseMembers(value, existing = []) {
+  function parseMembers(value, existing = [], emails = '') {
     const names = value.split(',').map(name => name.trim()).filter(Boolean);
     if (!names.length) throw Error('Enter at least one member name.');
     if (names.some(name => name.length > 50)) throw Error('Member names must be 50 characters or fewer.');
     const allNames = [...existing.map(member => member.name), ...names].map(name => name.toLowerCase());
     if (new Set(allNames).size !== allNames.length) throw Error('Use a unique name for each member.');
     if (allNames.length > 30) throw Error('A group can have up to 30 members.');
-    return names.map(name => ({id: newId(), name}));
+    const addresses = emails.split(',').map(email => email.trim().toLowerCase());
+    if (addresses.slice(names.length).some(Boolean)) throw Error('Add a name for every email address.');
+    const usedEmails = new Set(existing.map(member => member.email).filter(Boolean));
+    return names.map((name, index) => {
+      const email = addresses[index] || '';
+      if (email && !validEmail(email)) throw Error(`Enter a valid email address for ${name}.`);
+      if (email && usedEmails.has(email)) throw Error('Use a unique email address for each member.');
+      if (email) usedEmails.add(email);
+      return {id: newId(), name, ...(email ? {email} : {})};
+    });
   }
+
+  const validEmail = email => email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   function createGroup() {
     closeGroups();
     Forms.group(async data => {
       const name = data.get('name').trim();
       if (!name) throw Error('Enter a group name.');
-      const members = parseMembers(data.get('members'));
+      const members = parseMembers(data.get('members'), [], data.get('emails'));
       if (members.length < 2) throw Error('Add at least two members.');
       const group = {id: newId(), name, icon: '👥', members, expenses: [], payments: []};
       await commit(next => next.groups.push(group), 'Group created.');
@@ -165,8 +177,17 @@
     const group = currentGroup();
     if (group.closed) return notify('Reopen this group before making changes.');
     Forms.members(group, async data => {
-      const members = parseMembers(data.get('members'), currentGroup().members);
-      await commit(next => next.groups.find(item => item.id === group.id).members.push(...members), 'Members added.');
+      const existing = currentGroup().members.map(member => ({...member, email: String(data.get(`email-${member.id}`) || '').trim().toLowerCase()}));
+      if (existing.some(member => member.email && !validEmail(member.email))) throw Error('Enter a valid member email address.');
+      const addresses = existing.map(member => member.email).filter(Boolean);
+      if (new Set(addresses).size !== addresses.length) throw Error('Use a unique email address for each member.');
+      const names = String(data.get('members') || '').trim();
+      const members = names ? parseMembers(names, existing, data.get('emails')) : [];
+      if (!members.length && existing.every((member, index) => member.email === (group.members[index].email || ''))) throw Error('Add a member or change an email address.');
+      await commit(next => {
+        const target = next.groups.find(item => item.id === group.id);
+        target.members = [...existing.map(member => member.email ? member : {id:member.id,name:member.name}), ...members];
+      }, 'Members updated.');
     });
   }
 
@@ -292,7 +313,7 @@
   });
   // Creator accounts and shared edit links.
   async function refresh() {
-    if ((!user && !linkToken) || saving || loading) return;
+    if (!user || saving || loading) return;
     loading = true;
     const epoch = authEpoch;
     try {
@@ -306,7 +327,7 @@
         render();
         return;
       }
-      const rows = await Cloud.groups(user.id);
+      const rows = await Cloud.groups();
       if (epoch !== authEpoch) return;
       records = new Map(rows.map(row => [row.id, row]));
       state = {groups: rows.map(row => row.document)};
@@ -336,7 +357,7 @@
     const epoch = authEpoch;
     const token = await Cloud.editLink(group.id, replaceLink);
     if (epoch !== authEpoch) return;
-    Forms.open('Share group', `<p>Anyone with this link can view and edit expenses, repayments and participant names. No sign-in, email or membership is needed.</p>
+    Forms.open('Share group', `<p>Anyone signed in with Google and holding this link can view and edit expenses, repayments and participant names.</p>
       <label for="invite-link">Group edit link</label>
       <div class="share-link-row"><input id="invite-link" readonly value="${Views.escape(groupLink(group.id, token))}">
         <button type="button" class="secondary copy-link" id="copy-group-link" aria-label="Copy group link"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copy</span></button>
@@ -377,8 +398,14 @@
   $('#sign-in-submit').onclick = async () => {
     $('#sign-in-submit').disabled = true;
     $('#auth-message').textContent = '';
-    try { await Cloud.signIn(); }
-    catch (error) { $('#auth-message').textContent = error.message; }
+    try {
+      if (linkToken) sessionStorage.setItem(pendingLinkKey, location.href);
+      await Cloud.signIn();
+    }
+    catch (error) {
+      sessionStorage.removeItem(pendingLinkKey);
+      $('#auth-message').textContent = error.message;
+    }
     finally { $('#sign-in-submit').disabled = false; }
   };
   $('#sign-out').onclick = async () => {
@@ -426,21 +453,25 @@
     if (user) setTimeout(() => refresh().catch(error => notify(error.message)), 0);
   }
   render();
-  if (linkedGroupId && !linkToken) $('#auth-description').textContent = 'Creators can sign in below. To open a shared group without signing in, ask for its complete edit link.';
+  if (linkedGroupId && !linkToken) $('#auth-description').textContent = 'Sign in with Google to open a group. Ask its creator for the complete shared edit link.';
   if (!window.Cloud?.configured) {
     $('#auth-description').textContent = 'Sign-in is not available yet. Please contact the app owner. Existing browser data has not been changed.';
     if (linkToken) $('#group-link-message').textContent = 'Group access is not configured yet. Please contact the app owner.';
-  } else if (linkToken) {
-    $('#group-link-message').textContent = 'Opening shared group…';
-    refresh().catch(error => notify(error.message));
   } else {
     $('#sign-in-submit').hidden = false;
     Cloud.watch(session => setAccount(session));
     const initialEpoch = authEpoch;
-    Cloud.session().then(session => { if (initialEpoch === authEpoch) setAccount(session); }).catch(error => { $('#auth-message').textContent = error.message; });
+    Cloud.session().then(session => {
+      if (initialEpoch === authEpoch) setAccount(session);
+      const pendingLink = sessionStorage.getItem(pendingLinkKey);
+      if (session?.user && pendingLink) {
+        sessionStorage.removeItem(pendingLinkKey);
+        if (!linkToken && new URL(pendingLink).origin === location.origin) location.replace(pendingLink);
+      }
+    }).catch(error => { $('#auth-message').textContent = error.message; });
   }
   if (window.Cloud?.configured) {
     window.addEventListener('focus', () => { if (!$('#dialog').open) refresh().catch(error => notify(error.message)); });
-    setInterval(() => { if ((user || linkToken) && !document.hidden && !$('#dialog').open) refresh().catch(error => notify(error.message)); }, 30000);
+    setInterval(() => { if (user && !document.hidden && !$('#dialog').open) refresh().catch(error => notify(error.message)); }, 30000);
   }
 })();

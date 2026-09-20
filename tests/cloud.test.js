@@ -30,7 +30,7 @@ test('Google sign-in errors are passed back for display and retry', async () => 
   await assert.rejects(cloud.signIn(),error);
 });
 
-test('link visitors use only link RPCs, without authentication or member lookup', async () => {
+test('link visitors use only link RPCs, without member lookup', async () => {
   const calls = [];
   const cloud = loadCloud({rpc:(name,args) => {
     calls.push({name,args});

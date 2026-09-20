@@ -21,7 +21,7 @@ window.Cloud = {
     }}));
   },
   signOut() { return result(client.auth.signOut({scope:'local'})); },
-  groups(ownerId) { return result(client.from('gather_groups').select('*').eq('owner_id', ownerId).order('created_at')); },
+  groups() { return result(client.from('gather_groups').select('*').order('created_at')); },
   create(doc) { return rpc('create_group', {doc}, true); },
   save(gid, doc, expected_version) { return rpc('save_group', {gid, doc, expected_version}, true); },
   remove(gid, expected_version) { return rpc('delete_group', {gid, expected_version}); },

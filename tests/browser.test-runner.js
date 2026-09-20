@@ -52,7 +52,7 @@ async function main(){
  await run(`document.querySelector('#groups-toggle').click();document.querySelector('#create-group').click()`);
  assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),false);
  assert.equal(await evaluate(`document.querySelector('#dialog').open`),true);
- await run(`document.querySelector('#group-name').value='Browser test';document.querySelector('#member-names').value='Alex, Bea, Casey';document.querySelector('#submit').click()`);
+ await run(`document.querySelector('#group-name').value='Browser test';document.querySelector('#member-names').value='Alex, Bea, Casey';document.querySelector('#member-emails').value=', , guest@example.com';document.querySelector('#submit').click()`);
  assert.equal(await evaluate(`document.querySelector('#dialog').open`),false);
  assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'1');
  await run(`document.querySelector('#groups-toggle').click()`);
@@ -111,7 +111,7 @@ async function main(){
  for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate('document.readyState === "complete" && !!document.querySelector("[data-delete]")'))break;}
  assert.equal(await evaluate(`document.querySelectorAll('#expenses .expense-row').length`),1,'Saved expense survives reload');
  await run(`document.querySelector('#manage-access').click()`);
- assert.match(await evaluate(`document.querySelector('#fields').textContent`),/No sign-in/);
+ assert.match(await evaluate(`document.querySelector('#fields').textContent`),/signed in with Google/);
  const oldLink = await evaluate(`document.querySelector('#invite-link').value`);
  assert.match(new URL(oldLink).hash, /^#edit=[0-9a-f]{64}$/,'Shared link contains an unguessable edit key');
  await run(`document.querySelector('#replace-group-link').click();document.querySelector('#submit').click()`);
@@ -120,20 +120,28 @@ async function main(){
  await run(`document.querySelector('#submit').click()`);
  await evaluate(`window.__testCloud.setAccount(null)`);
  await call('Page.navigate',{url:oldLink},sessionId);
+ assert.equal(await evaluate(`document.querySelector('#auth-panel').hidden`),false,'Shared links prompt for Google sign-in');
+ assert.equal(await evaluate(`document.querySelector('#group-workspace').hidden`),true,'Signed-out visitors cannot open a group');
+ await evaluate(`document.querySelector('#sign-in-submit').click()`);
+ await evaluate(`window.__testCloud.setAccount({id:'00000000-0000-4000-8000-000000000002',email:'guest@example.com'})`);
  for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.querySelector('#group-link-message')?.textContent.includes('invalid')`))break;}
  assert.equal(await evaluate(`document.querySelector('#group-workspace').hidden`),true,'Replaced link does not expose the group');
  await call('Page.navigate',{url:sharedGroupLink},sessionId);
  for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate('document.readyState === "complete" && !!document.querySelector("[data-edit]")'))break;}
- assert.equal(await evaluate(`document.querySelector('#auth-panel').hidden`),true,'Link visitors need no sign-in');
- assert.equal(await evaluate(`document.querySelector('#page-title').textContent`),'Browser test','Anonymous visitor opens the shared group');
+ assert.equal(await evaluate(`document.querySelector('#auth-panel').hidden`),true,'Signed-in link visitors can open the group');
+ assert.equal(await evaluate(`document.querySelector('#page-title').textContent`),'Browser test','Signed-in visitor opens the shared group');
  assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'1','Only the linked group is shown');
  assert.equal(await evaluate(`document.querySelector('#group-options').hidden`),true,'Destructive group administration remains owner-only');
- assert.equal(await evaluate(`document.querySelector('#manage-members').hidden`),false,'Link visitors can manage participant names');
+ assert.equal(await evaluate(`document.querySelector('#manage-members').hidden`),true,'Only the owner manages member access');
  await run(`document.querySelector('[data-edit]').click();document.querySelector('#description').value='Edited through link';document.querySelector('#submit').click()`);
- assert.match(await evaluate(`document.querySelector('#expenses').textContent`),/Edited through link/,'Anonymous edits are saved');
+ assert.match(await evaluate(`document.querySelector('#expenses').textContent`),/Edited through link/,'Signed-in link edits are saved');
  await call('Page.reload',{},sessionId);
  for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.querySelector('#expenses')?.textContent.includes('Edited through link')`))break;}
- assert.match(await evaluate(`document.querySelector('#expenses').textContent`),/Edited through link/,'Anonymous edits survive reload');
+ assert.match(await evaluate(`document.querySelector('#expenses').textContent`),/Edited through link/,'Signed-in link edits survive reload');
+ const guestAccountUrl = new URL(sharedGroupLink); guestAccountUrl.hash=''; guestAccountUrl.search='';
+ await call('Page.navigate',{url:guestAccountUrl.href},sessionId);
+ for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.querySelector('#page-title')?.textContent === 'Browser test'`))break;}
+ assert.equal(await evaluate(`document.querySelector('#page-title').textContent`),'Browser test','Listed member opens group without a shared link');
  await evaluate(`window.__testCloud.setAccount(window.__testCloud.owner)`);
  const accountUrl = new URL(sharedGroupLink); accountUrl.hash=''; accountUrl.search='';
  await call('Page.navigate',{url:accountUrl.href},sessionId);

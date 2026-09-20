@@ -236,6 +236,13 @@ async function main(){
  await run(`document.querySelector('#groups-toggle').click();document.querySelector('#import-groups').click();document.querySelector('#submit').click()`);
  assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'1','Import retries do not duplicate groups');
  assert.equal(await evaluate(`JSON.parse(localStorage.getItem('gather-expenses-v2')).groups.length`),1,'Import preserves the original backup');
+ await run(`document.querySelector('#groups-toggle').click();document.querySelector('#create-group').click();document.querySelector('#group-name').value='Second group';document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`document.querySelector('#page-title').textContent`),'Second group');
+ await run(`document.querySelector('#groups-toggle').click();document.querySelector('#group-nav [data-group]:first-of-type').click()`);
+ assert.equal(await evaluate(`document.querySelector('#page-title').textContent`),'Legacy group');
+ await call('Page.reload',{},sessionId);
+ for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.querySelector('#group-count').textContent === '2'`))break;}
+ assert.equal(await evaluate(`document.querySelector('#page-title').textContent`),'Legacy group','Reload keeps the selected group');
  await run(`document.querySelector('#groups-toggle').click();document.querySelector('#sign-out').click()`);
  assert.equal(await evaluate(`document.querySelector('#auth-panel').hidden`),false,'Sign-out returns to sign-in');
  assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),false,'Sign-out closes private dialogs');

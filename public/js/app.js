@@ -3,6 +3,7 @@
   const $ = selector => document.querySelector(selector);
   // Keep the original key so existing groups and expenses survive the redesign.
   const STORAGE_KEY = 'gather-expenses-v2';
+  const selectedGroupKey = accountId => `gather-selected-group:${accountId}`;
   let state = {groups: []};
   let selectedGroupId = null;
   const linkedGroupId = new URL(location.href).searchParams.get('group');
@@ -169,6 +170,7 @@
 
   function manageMembers() {
     const group = currentGroup();
+    if (user && group) sessionStorage.setItem(selectedGroupKey(user.id), group.id);
     if (group.closed) return notify('Reopen this group before making changes.');
     Forms.members(group, async data => {
       const newEmails = String(data.get('emails') || '').trim();
@@ -365,8 +367,13 @@
       if (accountName) Views.setName(user.email, accountName);
       records = new Map(rows.map(row => [row.id, row]));
       state = {groups: rows.map(row => row.document)};
-      if (linkedGroupId && !selectedGroupId && records.has(linkedGroupId)) selectedGroupId = linkedGroupId;
+      if (!selectedGroupId) {
+        const rememberedId = sessionStorage.getItem(selectedGroupKey(user.id));
+        selectedGroupId = linkedGroupId && records.has(linkedGroupId) ? linkedGroupId
+          : rememberedId && records.has(rememberedId) ? rememberedId : null;
+      }
       render();
+      if (!state.groups.length) sessionStorage.removeItem(selectedGroupKey(user.id));
       $('#group-link-message').textContent = linkedGroupId && !records.has(linkedGroupId)
         ? 'This group is not available to your signed-in email.' : '';
     } catch (error) {

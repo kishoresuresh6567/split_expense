@@ -21,6 +21,11 @@
   let authEpoch = 0;
   let accountName = '';
   const isOwner = group => Boolean(user && records.get(group?.id)?.owner_id === user.id);
+  const canEditExpense = (group, expense) => {
+    const creatorId = expense.created_by || records.get(group?.id)?.owner_id;
+    const payerEmail = group.members.find(member => member.id === expense.payer)?.email?.toLowerCase();
+    return Boolean(user && (creatorId === user.id || payerEmail === user.email?.toLowerCase()));
+  };
 
   const newId = () => typeof crypto.randomUUID === 'function' ? crypto.randomUUID()
     : Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -117,7 +122,7 @@
       else $(`#${name}-tab`).removeAttribute('aria-current');
     }
     const openIds = [...document.querySelectorAll('details[open]')].map(row => row.dataset.expense);
-    const expenses = Views.expenseRows(group, search);
+    const expenses = Views.expenseRows(group, search, expense => canEditExpense(group, expense));
     $('#expenses').innerHTML = expenses.html;
     document.querySelectorAll('details').forEach(row => row.open = openIds.includes(row.dataset.expense));
     $('#expense-count').textContent = `${expenses.count} ${expenses.count === 1 ? 'expense' : 'expenses'}`;
@@ -175,6 +180,7 @@
     if (group.closed) return notify('Reopen this group before making changes.');
     const existing = expenseId ? group.expenses.find(expense => expense.id === expenseId) : null;
     if (expenseId && !existing) throw Error('This expense no longer exists.');
+    if (existing && !canEditExpense(group, existing)) throw Error('Only the person who added or paid this expense can edit it.');
     Forms.expense(group, existing, async data => {
       const name = data.get('name').trim();
       const amount = Math.round(Number(data.get('amount')) * 100);
@@ -184,7 +190,8 @@
       if (!name) throw Error('Enter an expense name.');
       if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 10000000000) throw Error('Enter a valid amount.');
       if (split.method === 'even') split.values = {};
-      const expense = {id: existing?.id || newId(), name, amount, members, payer, split, category: data.get('category'), date: data.get('date')};
+      const expense = {id: existing?.id || newId(), name, amount, members, payer, split, category: data.get('category'), date: data.get('date'),
+        ...(existing?.created_by ? {created_by:existing.created_by} : !existing ? {created_by:user.id} : {})};
       await commit(next => {
         const target = next.groups.find(item => item.id === group.id);
         if (existing) {
@@ -234,6 +241,8 @@
       await commit(next => Split.removeMember(next.groups.find(item => item.id === group.id), dataset.removeMember), 'Member removed.');
       $('#member-list').innerHTML = Views.members(currentGroup());
     } else if (dataset.delete) {
+      const expense = group.expenses.find(item => item.id === dataset.delete);
+      if (!expense || !canEditExpense(group, expense)) throw Error('Only the person who added or paid this expense can delete it.');
       Forms.confirm('Delete expense?', 'This removes the expense and updates balances. Recorded repayments stay unchanged.', async () => {
         await commit(next => {
           const target = next.groups.find(item => item.id === group.id);

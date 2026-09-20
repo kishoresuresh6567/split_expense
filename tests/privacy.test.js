@@ -280,4 +280,37 @@ test('Supabase privacy rules execute in Postgres for owner, invitee, outsider an
     await login(3);
     assert.equal((await read('groups'))[0].version,4);
   });
+  await t.test('only the expense creator and stored payer can edit or delete it', async () => {
+    await db.exec('reset role');
+    await db.exec(fs.readFileSync(path.join(__dirname, '../supabase/migrations/202609200006_expense_editors.sql'),'utf8'));
+    const group = {...doc,id:uid(60),expenses:[],payments:[],members:[
+      {id:'a',email:'owner@example.com'}, {id:'b',email:'member@example.com'}, {id:'c',email:'outsider@example.com'}
+    ]};
+    const expense = {id:'lunch',name:'Lunch',amount:100,payer:'b',members:['a','b','c'],created_by:uid(1)};
+    await login(1);
+    await rpc('create_group',[group]);
+    const token = await rpc('edit_link',[group.id,false]);
+    assert.equal((await rpc('save_group',[group.id,{...group,expenses:[expense]},1])).version,2);
+    await login(3);
+    await assert.rejects(rpc('save_group',[group.id,{...group,expenses:[expense,{...expense,id:'forged',created_by:uid(1)}]},2]),/added or paid/);
+    await assert.rejects(rpc('save_group',[group.id,{...group,expenses:[{...expense,name:'Forged'}]},2]),/added or paid/);
+    await assert.rejects(rpc('save_group',[group.id,{...group,expenses:[{...expense,payer:'c'}]},2]),/added or paid/);
+    await assert.rejects(rpc('save_group',[group.id,group,2]),/added or paid/);
+    await assert.rejects(rpc('save_link',[token,{...group,expenses:[{...expense,name:'Forged'}]},2]),/added or paid/);
+    await login(2);
+    const paid = {...expense,name:'Payer edit',payer:'c'};
+    assert.equal((await rpc('save_group',[group.id,{...group,expenses:[paid]},2])).version,3);
+    await assert.rejects(rpc('save_group',[group.id,{...group,expenses:[{...paid,name:'Old payer edit'}]},3]),/added or paid/);
+    await login(3);
+    assert.equal((await rpc('save_link',[token,{...group,expenses:[{...paid,name:'New payer edit'}]},3])).version,4);
+    await login(1);
+    assert.equal((await rpc('save_group',[group.id,group,4])).version,5,'Creator can delete their expense');
+    const legacy = {...group,id:uid(61),expenses:[{...expense,id:'older',created_by:undefined}]};
+    delete legacy.expenses[0].created_by;
+    await rpc('create_group',[legacy]);
+    await login(3);
+    await assert.rejects(rpc('save_group',[legacy.id,{...legacy,expenses:[{...legacy.expenses[0],name:'Unauthorized'}]},1]),/added or paid/);
+    await login(2);
+    assert.equal((await rpc('save_group',[legacy.id,{...legacy,expenses:[{...legacy.expenses[0],name:'Payer can edit old expense'}]},1])).version,2);
+  });
 });

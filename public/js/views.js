@@ -26,7 +26,7 @@ const Views = (() => {
       .map(([label, value]) => `<div class="summary-item"><span>${label}</span><strong>${value}</strong></div>`).join('');
   }
 
-  function expenseRows(group, query) {
+  function expenseRows(group, query, canEdit = () => true) {
     const expenses = group.expenses.filter(expense => `${expense.name} ${memberName(group, expense.payer)}`.toLowerCase().includes(query.toLowerCase()))
       .slice().sort((a, b) => b.date.localeCompare(a.date));
     const html = expenses.map(expense => `<details class="expense-row" data-expense="${escape(expense.id)}">
@@ -34,7 +34,7 @@ const Views = (() => {
         <span class="expense-amount">${money(expense.amount)}</span><span class="expand-label">Details ⌄</span></summary>
       <div class="expense-expanded"><p class="share-heading">Split among ${expense.members.length} members · ${Split.splitMethods[expense.split?.method || 'even']}</p><div class="share-list">
         ${Split.allocations(expense).map(share => `<div class="share-row"><span>${escape(memberName(group, share.id))}</span><span>${money(share.amount)}</span></div>`).join('')}
-      </div><div class="row-actions"><button class="secondary" data-edit="${escape(expense.id)}">Edit expense</button><button class="danger" data-delete="${escape(expense.id)}">Delete expense</button></div></div>
+      </div>${canEdit(expense) ? `<div class="row-actions"><button class="secondary" data-edit="${escape(expense.id)}">Edit expense</button><button class="danger" data-delete="${escape(expense.id)}">Delete expense</button></div>` : ''}</div>
     </details>`).join('');
     return {html: html || `<div class="empty">${query ? 'No matching expenses.' : 'No expenses yet. Click + Add expense to get started.'}</div>`, count: expenses.length};
   }

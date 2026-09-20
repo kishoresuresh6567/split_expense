@@ -66,7 +66,7 @@ async function main(){
  await run(`document.querySelector('#group-nav [data-group]').click()`);
  assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),false);
  await run(`document.querySelector('#manage-members').click();document.querySelector('#new-member-emails').value='drew@example.com';document.querySelector('#submit').click()`);
- await run(`document.querySelector('#add-expense').click();document.querySelector('#description').value='Lunch';document.querySelector('#amount').value='100';document.querySelectorAll('[name=member]')[3].click();document.querySelector('#submit').click()`);
+ await run(`document.querySelector('#add-expense').click();document.querySelector('#description').value='Lunch';document.querySelector('#amount').value='100';document.querySelector('#payer').selectedIndex=2;document.querySelectorAll('[name=member]')[3].click();document.querySelector('#submit').click()`);
  assert.equal(await evaluate(`document.querySelectorAll('.expense-row').length`),1);
  await run(`document.querySelector('#manage-members').click()`);
  assert.equal(await evaluate(`document.querySelectorAll('[data-remove-member]:disabled').length`),3,'Recorded members stay protected');
@@ -123,6 +123,13 @@ async function main(){
  await call('Page.reload',{},sessionId);
  for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate('document.readyState === "complete" && !!document.querySelector("[data-delete]")'))break;}
  assert.equal(await evaluate(`document.querySelectorAll('#expenses .expense-row').length`),1,'Saved expense survives reload');
+ await evaluate(`window.__testCloud.setAccount({id:'00000000-0000-4000-8000-000000000003',email:'bea@example.com'})`);
+ for(let i=0;i<30;i++){await new Promise(r=>setTimeout(r,50));if(await evaluate(`document.querySelector('#dialog-title')?.textContent === 'Your name'`))break;}
+ await evaluate(`document.querySelector('#profile-name').value='Bea';document.querySelector('#submit').click()`);
+ await new Promise(resolve=>setTimeout(resolve,100));
+ assert.equal(await evaluate(`document.querySelector('[data-edit], [data-delete]') === null`),true,'Member who neither added nor paid cannot edit or delete expense');
+ await evaluate(`window.__testCloud.setAccount(window.__testCloud.owner)`);
+ for(let i=0;i<30;i++){await new Promise(r=>setTimeout(r,50));if(await evaluate(`document.querySelector('[data-edit]') !== null`))break;}
  assert.equal(await evaluate(`document.querySelector('#manage-access') === null`),true,'Share group option is removed');
  const linkedId = await evaluate(`JSON.parse(sessionStorage.getItem('gather-test-cloud'))[0].id`);
  const sharedPageUrl = await evaluate(`location.href`);

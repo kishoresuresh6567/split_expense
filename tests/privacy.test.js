@@ -257,4 +257,27 @@ test('Supabase privacy rules execute in Postgres for owner, invitee, outsider an
     assert.deepEqual(await read('groups'),[],'Removing the email revokes access');
     await assert.rejects(rpc('save_group',[group.id,revoked,3]),/unavailable/);
   });
+  await t.test('listed members can add and remove members while creator controls group settings', async () => {
+    await db.exec('reset role');
+    await db.exec(fs.readFileSync(path.join(__dirname, '../supabase/migrations/202609200005_member_management.sql'),'utf8'));
+    const group = {...doc,id:uid(50),members:[{id:'a',email:'owner@example.com'},{id:'b',email:'member@example.com'}]};
+    await login(1);
+    await rpc('create_group',[group]);
+    const token = await rpc('edit_link',[group.id,false]);
+    await login(3);
+    assert.deepEqual(await read('groups'),[]);
+    await login(2);
+    const expanded = {...group,members:[...group.members,{id:'c',email:'outsider@example.com'}]};
+    assert.equal((await rpc('save_group',[group.id,expanded,1])).version,2);
+    await assert.rejects(rpc('save_group',[group.id,{...expanded,closed:true},2]),/creator/);
+    await assert.rejects(rpc('save_link',[token,{...expanded,name:'Renamed'},2]),/creator/);
+    await login(3);
+    assert.equal((await read('groups'))[0].id,group.id,'Newly added member can open the group');
+    assert.equal((await rpc('save_group',[group.id,group,2])).version,3,'New member can manage members too');
+    assert.deepEqual(await read('groups'),[],'Removing own email revokes access');
+    await login(2);
+    assert.equal((await rpc('save_link',[token,expanded,3])).version,4,'Listed member can manage members through an old link');
+    await login(3);
+    assert.equal((await read('groups'))[0].version,4);
+  });
 });

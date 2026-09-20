@@ -12,6 +12,7 @@ Shared expenses with Google sign-in for everyone, including people opening edita
    - [Member email access](supabase/migrations/202609200002_member_email_access.sql)
    - [Links require listed email](supabase/migrations/202609200003_links_require_listed_email.sql)
    - [Member display names](supabase/migrations/202609200004_member_display_names.sql)
+   - [Member management](supabase/migrations/202609200005_member_management.sql)
 2. Enable **Google** in Supabase **Authentication ? Sign In / Providers** and enter your Google OAuth client ID and secret. In Google Cloud, configure a web OAuth client using the callback URL shown by Supabase (`https://YOUR_PROJECT.supabase.co/auth/v1/callback`). Follow the [Supabase Google setup guide](https://supabase.com/docs/guides/auth/social-login/auth-google).
 3. Set the production website as Supabase's **Site URL** and allow its exact URL under **Redirect URLs**. Allow `http://localhost:3000/` for local development (or the actual port). Configure your Google OAuth app's audience/test users as needed. Google sign-in must be enabled in the hosted project; deploying code does not enable a provider.
 4. The app no longer uses Supabase email/password signup, password resets, magic links or invitations. After confirming existing creators can access their groups through Google, disable the Email auth provider if you want to prevent those methods at the hosted API as well. Use the same Google email as the existing creator account; Supabase supports [automatic identity linking](https://supabase.com/docs/guides/auth/auth-identity-linking) for matching emails.
@@ -28,7 +29,7 @@ Shared expenses with Google sign-in for everyone, including people opening edita
 
 ## Group access
 
-Everyone chooses **Continue with Google**. On first sign-in the app asks each person for the name they want other group members to see; they can change it later using **Edit my name**. The creator's signed-in email is added to each new group automatically, and they can add other participants by email when creating the group or under **Manage members**. Expense and balance screens show the person's chosen name when available, and their email otherwise. After signing in with the listed address, a participant sees the group in their normal group list without a shared URL. An unlisted address has no access to that group. The creator alone can change member emails; removing an email revokes that access.
+Everyone chooses **Continue with Google**. On first sign-in the app asks each person for the name they want other group members to see; they can change it later using **Edit my name**. The creator's signed-in email is added to each new group automatically, and they can add other participants by email when creating the group or under **Manage members**. Expense and balance screens show the person's chosen name when available, and their email otherwise. After signing in with the listed address, a participant sees the group in their normal group list without a shared URL. An unlisted address has no access to that group. Any listed member can add, change or remove member emails; removing an email revokes that person's access.
 
 Other member emails are optional. A group with only its creator can track monthly spending or solo travel costs. Expenses in a one-member group have no repayment balance, and other members can be added later.
 
@@ -38,7 +39,7 @@ The **Share group** option has been removed. Add a member's email under **Manage
 | --- | --- | --- | --- |
 | View expenses and balances | Yes | Yes | No |
 | Add/edit/delete expenses; record/undo repayments | Yes | Yes | No |
-| Manage participants and their access emails | Yes | No | No |
+| Manage participants and their access emails | Yes | Yes | No |
 | Close/reopen/delete group | Yes | No | No |
 
 Closed groups remain readable by listed members; only the creator can reopen them. A previously issued link shows only its linked group. **Go to my account** leaves link mode.

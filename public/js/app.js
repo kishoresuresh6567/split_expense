@@ -100,7 +100,7 @@
     }
     $('#group-options').open = false;
     $('#closed-group-note').hidden = !group.closed;
-    $('#manage-members').hidden = Boolean(group.closed) || !isOwner(group);
+    $('#manage-members').hidden = Boolean(group.closed);
     $('#group-options').hidden = !isOwner(group);
     $('#add-expense').hidden = Boolean(group.closed);
     $('#close-group').hidden = Boolean(group.closed);

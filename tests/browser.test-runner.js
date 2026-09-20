@@ -149,7 +149,9 @@ async function main(){
  assert.equal(await evaluate(`document.querySelector('#page-title').textContent`),'Browser test','Signed-in visitor opens the shared group');
  assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'1','Only the linked group is shown');
  assert.equal(await evaluate(`document.querySelector('#group-options').hidden`),true,'Destructive group administration remains owner-only');
- assert.equal(await evaluate(`document.querySelector('#manage-members').hidden`),true,'Only the owner manages member access');
+ assert.equal(await evaluate(`document.querySelector('#manage-members').hidden`),false,'Listed members can manage members');
+ await run(`document.querySelector('#manage-members').click();document.querySelector('#new-member-emails').value='newguest@example.com';document.querySelector('#submit').click()`);
+ assert.match(await evaluate(`JSON.stringify(JSON.parse(sessionStorage.getItem('gather-test-cloud'))[0].document.members)`),/newguest@example.com/,'Listed member can add another member');
  await run(`document.querySelector('[data-edit]').click();document.querySelector('#description').value='Edited through link';document.querySelector('#submit').click()`);
  assert.match(await evaluate(`document.querySelector('#expenses').textContent`),/Edited through link/,'Signed-in link edits are saved');
  await call('Page.reload',{},sessionId);

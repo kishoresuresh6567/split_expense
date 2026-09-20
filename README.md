@@ -28,7 +28,9 @@ Shared expenses with Google sign-in for everyone, including people opening edita
 
 ## Group access
 
-Everyone chooses **Continue with Google**. On first sign-in the app asks each person for the name they want other group members to see; they can change it later using **Edit my name**. Creators add participants by email address when creating a group or under **Manage members**. Expense and balance screens show the person's chosen name when available, and their email otherwise. After signing in with the listed address, a participant sees the group in their normal group list without a shared URL. An unlisted address has no access to that group. The creator alone can change member emails; removing an email revokes that access.
+Everyone chooses **Continue with Google**. On first sign-in the app asks each person for the name they want other group members to see; they can change it later using **Edit my name**. The creator's signed-in email is added to each new group automatically, and they can add other participants by email when creating the group or under **Manage members**. Expense and balance screens show the person's chosen name when available, and their email otherwise. After signing in with the listed address, a participant sees the group in their normal group list without a shared URL. An unlisted address has no access to that group. The creator alone can change member emails; removing an email revokes that access.
+
+Other member emails are optional. A group with only its creator can track monthly spending or solo travel costs. Expenses in a one-member group have no repayment balance, and other members can be added later.
 
 To send a direct link to someone already listed by email, choose **Share group**, copy its **Group edit link**, and send it yourself. A recipient must sign in with their listed Google email before opening the link. The app sends no invitation email.
 

@@ -2,6 +2,13 @@ const {test}=require('node:test');const assert=require('node:assert/strict');con
 const {removeMember}=require('../public/js/expense-logic');
 const {updateExpenseSplit}=require('../public/js/expense-logic');
 const {allocations}=require('../public/js/expense-logic');
+test('A one-member group can record personal expenses without creating a debt',()=>{
+ const g={members:[{id:'owner',email:'owner@example.com'}],expenses:[{id:'travel',amount:12345,payer:'owner',members:['owner']}],payments:[]};
+ assert.deepEqual(allocations(g.expenses[0]),[{id:'owner',amount:12345}]);
+ assert.deepEqual(balances(g),{owner:0});
+ assert.deepEqual(settlements(g),[]);
+ assert.throws(()=>removeMember(g,'owner'),/recorded|at least one/);
+});
 test('Exact amounts, weighted shares, and percentages use the chosen allocation',()=>{
  const base={amount:10000,members:['a','b','c']};
  assert.deepEqual(allocations({...base,split:{method:'amounts',values:{a:'10.25',b:'29.75',c:'60'}}}).map(p=>p.amount),[1025,2975,6000]);

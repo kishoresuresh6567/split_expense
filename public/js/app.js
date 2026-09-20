@@ -152,8 +152,12 @@
     Forms.group(async data => {
       const name = data.get('name').trim();
       if (!name) throw Error('Enter a group name.');
-      const members = parseMembers(data.get('emails'));
-      if (members.length < 2) throw Error('Add at least two members.');
+      const creatorEmail = user?.email?.trim().toLowerCase();
+      if (!validEmail(creatorEmail || '')) throw Error('Sign in with a verified email first.');
+      const otherEmails = String(data.get('emails') || '').split(',')
+        .filter(email => email.trim().toLowerCase() !== creatorEmail).join(',').trim();
+      const creator = {id:newId(), email:creatorEmail};
+      const members = [creator, ...(otherEmails ? parseMembers(otherEmails, [creator]) : [])];
       const group = {id: newId(), name, icon: '👥', members, expenses: [], payments: []};
       await commit(next => next.groups.push(group), 'Group created.');
       selectedGroupId = group.id;
@@ -168,20 +172,10 @@
     const group = currentGroup();
     if (group.closed) return notify('Reopen this group before making changes.');
     Forms.members(group, async data => {
-      const existing = currentGroup().members.map(member => {
-        const email = String(data.get(`email-${member.id}`) || '').trim().toLowerCase();
-        if (!validEmail(email)) throw Error('Enter an email address for every member.');
-        return {id:member.id, email};
-      });
-      const addresses = existing.map(member => member.email).filter(Boolean);
-      if (new Set(addresses).size !== addresses.length) throw Error('Use a unique email address for each member.');
       const newEmails = String(data.get('emails') || '').trim();
-      const members = newEmails ? parseMembers(newEmails, existing) : [];
-      if (!members.length && existing.every((member, index) => member.email === (group.members[index].email || ''))) throw Error('Add a member or change an email address.');
-      await commit(next => {
-        const target = next.groups.find(item => item.id === group.id);
-        target.members = [...existing, ...members];
-      }, 'Members updated.');
+      if (!newEmails) throw Error('Enter at least one member email.');
+      const members = parseMembers(newEmails, currentGroup().members);
+      await commit(next => next.groups.find(item => item.id === group.id).members.push(...members), 'Members added.');
     });
   }
 
@@ -216,7 +210,7 @@
   async function handleAction(button) {
     const group = currentGroup();
     const {dataset} = button;
-    if (group?.closed && ['edit','removeMember','delete','pay','undo'].some(key => dataset[key])) throw Error('Reopen this group before making changes.');
+    if (group?.closed && ['edit','changeMember','saveMember','removeMember','delete','pay','undo'].some(key => dataset[key])) throw Error('Reopen this group before making changes.');
     if (dataset.group) {
       closeGroups();
       selectedGroupId = dataset.group;
@@ -226,6 +220,25 @@
       render();
     } else if (dataset.edit) {
       expenseForm(dataset.edit);
+    } else if (dataset.changeMember) {
+      document.querySelectorAll('.member-edit').forEach(editor => editor.hidden = true);
+      const row = button.closest('[data-member-row]');
+      const editor = row.querySelector('.member-edit');
+      editor.hidden = false;
+      editor.querySelector('input').focus();
+      editor.querySelector('input').select();
+    } else if (dataset.cancelMember) {
+      button.closest('.member-edit').hidden = true;
+    } else if (dataset.saveMember) {
+      const memberId = dataset.saveMember;
+      const member = group.members.find(item => item.id === memberId);
+      if (!member) throw Error('This member is no longer in the group.');
+      const email = button.closest('.member-edit').querySelector('input').value.trim().toLowerCase();
+      if (!validEmail(email)) throw Error('Enter a valid email address.');
+      if (group.members.some(item => item.id !== memberId && item.email === email)) throw Error('This email is already in the group.');
+      if (member.email === email) { button.closest('.member-edit').hidden = true; return; }
+      await commit(next => { next.groups.find(item => item.id === group.id).members.find(item => item.id === memberId).email = email; }, 'Member email changed.');
+      $('#member-list').innerHTML = Views.members(currentGroup());
     } else if (dataset.removeMember) {
       await commit(next => Split.removeMember(next.groups.find(item => item.id === group.id), dataset.removeMember), 'Member removed.');
       $('#member-list').innerHTML = Views.members(currentGroup());
@@ -303,7 +316,21 @@
     const button = event.target.closest('button');
     if (!button || button.disabled) return;
     try { await handleAction(button); }
-    catch (error) { notify(error.message); }
+    catch (error) {
+      if (button.dataset.saveMember) button.closest('.member-edit').querySelector('.member-edit-error').textContent = error.message;
+      else notify(error.message);
+    }
+  });
+  document.addEventListener('keydown', event => {
+    if (!event.target.matches('.member-edit input')) return;
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.target.closest('.member-edit').querySelector('[data-save-member]').click();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      event.target.closest('.member-edit').querySelector('[data-cancel-member]').click();
+    }
   });
   // Creator accounts and shared edit links.
   async function refresh() {

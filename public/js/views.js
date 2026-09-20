@@ -54,8 +54,14 @@ const Views = (() => {
   function members(group) {
     return group.members.map(member => {
       const reason = Split.memberRemovalReason(group, member.id);
-      return `<div class="member-row"><div class="member-info">${escape(memberLabel(member))}${member.email && names.has(member.email.toLowerCase()) ? `<small>${escape(member.email)}</small>` : ''}${reason ? `<small>${escape(reason)}</small>` : ''}</div>
-        <button type="button" class="danger" data-remove-member="${escape(member.id)}" aria-label="Remove ${escape(memberLabel(member))}" ${reason ? 'disabled' : ''}>Remove</button></div>`;
+      return `<div class="member-row" data-member-row="${escape(member.id)}"><div class="member-info">${escape(memberLabel(member))}${member.email && names.has(member.email.toLowerCase()) ? `<small>${escape(member.email)}</small>` : ''}${reason ? `<small>${escape(reason)}</small>` : ''}</div>
+        <div class="member-actions"><button type="button" class="secondary" data-change-member="${escape(member.id)}" aria-label="Change email for ${escape(memberLabel(member))}">Change</button>
+        <button type="button" class="danger" data-remove-member="${escape(member.id)}" aria-label="Remove ${escape(memberLabel(member))}" ${reason ? 'disabled' : ''}>Remove</button></div>
+        <div class="member-edit" hidden><label for="change-email-${escape(member.id)}">New email</label>
+          <div class="member-edit-controls"><input id="change-email-${escape(member.id)}" type="email" maxlength="254" value="${escape(member.email || '')}" autocomplete="off">
+            <button type="button" class="primary" data-save-member="${escape(member.id)}">Save</button>
+            <button type="button" class="secondary" data-cancel-member="${escape(member.id)}">Cancel</button></div>
+          <small class="member-edit-error" role="alert"></small></div></div>`;
     }).join('');
   }
   return {escape, money, memberName, memberLabel, setNames, setName, groups, summary, expenseRows, transfers, payments, members};

@@ -55,10 +55,12 @@ async function main(){
  await run(`document.querySelector('#groups-toggle').click();document.querySelector('#create-group').click()`);
  assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),false);
  assert.equal(await evaluate(`document.querySelector('#dialog').open`),true);
- await run(`document.querySelector('#group-name').value='Browser test';document.querySelector('#member-emails').value='alex@example.com, bea@example.com, guest@example.com';document.querySelector('#submit').click()`);
+ await run(`document.querySelector('#group-name').value='Browser test';document.querySelector('#member-emails').value='owner@example.com, bea@example.com, guest@example.com';document.querySelector('#submit').click()`);
  assert.equal(await evaluate(`document.querySelector('#dialog').open`),false);
  assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'1');
  assert.equal(await evaluate(`JSON.parse(sessionStorage.getItem('gather-test-cloud'))[0].document.members.every(member => member.email && !('name' in member))`),true,'New members are stored by email only');
+ assert.equal(await evaluate(`JSON.parse(sessionStorage.getItem('gather-test-cloud'))[0].document.members.filter(member => member.email === 'owner@example.com').length`),1,'Creator is automatically included exactly once');
+ assert.equal(await evaluate(`JSON.parse(sessionStorage.getItem('gather-test-cloud'))[0].document.members.length`),3,'Creator and other emails make up the group');
  await run(`document.querySelector('#groups-toggle').click()`);
  assert.equal(await evaluate(`document.querySelectorAll('#group-nav [data-group]').length`),1);
  await run(`document.querySelector('#group-nav [data-group]').click()`);
@@ -68,6 +70,13 @@ async function main(){
  assert.equal(await evaluate(`document.querySelectorAll('.expense-row').length`),1);
  await run(`document.querySelector('#manage-members').click()`);
  assert.equal(await evaluate(`document.querySelectorAll('[data-remove-member]:disabled').length`),3,'Recorded members stay protected');
+ assert.equal(await evaluate(`document.querySelector('#member-emails') === null`),true,'Member email fields are not repeated below the list');
+ await run(`document.querySelectorAll('[data-change-member]')[3].click()`);
+ assert.equal(await evaluate(`document.querySelectorAll('.member-edit:not([hidden])').length`),1,'Change opens one inline email editor');
+ await run(`document.querySelector('.member-edit:not([hidden]) input').value='bea@example.com';document.querySelector('.member-edit:not([hidden]) [data-save-member]').click()`);
+ assert.match(await evaluate(`document.querySelector('.member-edit:not([hidden]) .member-edit-error').textContent`),/already in the group/,'Duplicate email is rejected inline');
+ await run(`document.querySelector('.member-edit:not([hidden]) input').value='drew.changed@example.com';document.querySelector('.member-edit:not([hidden]) [data-save-member]').click()`);
+ assert.match(await evaluate(`document.querySelector('#member-list').textContent`),/drew.changed@example.com/);
  await run(`document.querySelector('[data-remove-member]:not(:disabled)').click()`);
  assert.equal(await evaluate(`document.querySelectorAll('#member-list .member-row').length`),3,'Unused member removed');
  await run(`document.querySelector('#close-dialog').click()`);
@@ -196,6 +205,15 @@ async function main(){
  await call('Page.reload',{},sessionId);
  for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.readyState==='complete' && !document.querySelector('#welcome').hidden`))break;}
  assert.equal(await evaluate(`document.querySelector('#welcome').hidden`),false,'Deleted group does not return after reload');
+ await run(`document.querySelector('#groups-toggle').click();document.querySelector('#create-group').click()`);
+ assert.equal(await evaluate(`document.querySelector('#member-emails').required`),false,'Other members are optional');
+ await run(`document.querySelector('#group-name').value='Solo travel';document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`JSON.parse(sessionStorage.getItem('gather-test-cloud'))[0].document.members.length`),1,'Solo group contains only its creator');
+ await run(`document.querySelector('#add-expense').click();document.querySelector('#description').value='Train fare';document.querySelector('#amount').value='123.45';document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`JSON.parse(sessionStorage.getItem('gather-test-cloud'))[0].document.expenses.length`),1,'Solo expense is saved');
+ assert.equal(await evaluate(`document.querySelectorAll('.transfer').length`),0,'Solo expenses create no repayment');
+ await run(`document.querySelector('#group-options').open=true;document.querySelector('#delete-group').click();document.querySelector('#submit').click()`);
+ assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'0');
  await evaluate(`localStorage.setItem('gather-expenses-v2',JSON.stringify({groups:[{id:'00000000-0000-4000-8000-000000000099',name:'Legacy group',members:[{id:'a',name:'Alex'},{id:'b',name:'Bea'}],expenses:[],payments:[]}]}))`);
  await call('Page.reload',{},sessionId);
  for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.readyState==='complete' && !document.querySelector('#import-groups').hidden`))break;}

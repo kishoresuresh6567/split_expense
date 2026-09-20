@@ -128,9 +128,17 @@ input:not([type=checkbox]), select { width: 100%; border: 1px solid #443750; bor
 .check { display: flex; align-items: center; gap: 10px; font-weight: 400; background: #211a2c; border-radius: 6px; padding: 11px; margin: 6px 0; }
 .check input { accent-color: var(--accent); width: 16px; height: 16px; }
 .check span:last-child { margin-left: auto; font-size: 11px; color: #bcb0ce; }
-.member-row { display: flex; align-items: center; gap: 15px; padding: 13px 0; border-bottom: 1px solid var(--border); }
-.member-info { flex: 1; font-size: 13px; overflow-wrap: anywhere; }
+.member-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--border); }
+.member-info { flex: 1; min-width: 130px; font-size: 13px; overflow-wrap: anywhere; }
 .member-info small { display: block; font-size: 11px; line-height: 1.5; color: var(--muted); margin-top: 4px; }
+.member-actions, .member-edit-controls { display: flex; align-items: center; gap: 8px; }
+.member-actions button, .member-edit-controls button { padding: 8px 12px; }
+.member-edit { width: 100%; }
+.member-edit label { margin: 0 0 7px; }
+.member-edit-controls { flex-wrap: wrap; }
+.member-edit-controls input { flex: 1; min-width: 180px; }
+.member-edit-error { display: block; color: #ff9dba; font-size: 11px; margin-top: 7px; }
+.member-edit-error:empty { display: none; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 .error { color: #ff9dba; font-size: 12px; margin-top: 12px; }
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: 90vw; padding: 13px 20px; background: #6634a3; color: white; border-radius: 8px; font-size: 13px; z-index: 10; }

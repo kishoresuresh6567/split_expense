@@ -28,16 +28,15 @@ const Forms = (() => {
   }
 
   function group(save) {
-    open('Create group', `<label for="group-name">Group name</label><input id="group-name" name="name" maxlength="60" placeholder="e.g. Flatmates" required>
-      <label for="member-emails">Member email addresses</label><input id="member-emails" name="emails" maxlength="7600" placeholder="alex@gmail.com, bea@gmail.com" required>
-      <p class="form-help">Separate email addresses with commas. Include your own email. Only listed accounts can open the group without a shared link.</p>`, save, 'Create group');
+    open('Create group', `<label for="group-name">Group name</label><input id="group-name" name="name" maxlength="60" placeholder="e.g. Monthly expenses or Solo travel" required>
+      <label for="member-emails">Other member email addresses (optional)</label><input id="member-emails" name="emails" maxlength="7600" placeholder="alex@gmail.com, bea@gmail.com">
+      <p class="form-help">Your signed-in email is added automatically. Separate other email addresses with commas; you can add more members later.</p>`, save, 'Create group');
   }
 
   function members(group, save) {
     open('Manage members', `<p>${escape(group.name)}</p><div id="member-list">${Views.members(group)}</div>
-      <div id="member-emails">${group.members.map(member => `<label for="email-${escape(member.id)}">${escape(member.email || member.name)} email</label><input id="email-${escape(member.id)}" name="email-${escape(member.id)}" type="email" maxlength="254" value="${escape(member.email || '')}" placeholder="name@gmail.com" required>`).join('')}</div>
       <label for="new-member-emails">Add member emails</label><input id="new-member-emails" name="emails" maxlength="7600" placeholder="Emails separated by commas">
-      <p class="form-help">Only listed email accounts can open this group without a shared link. To include a new member in an existing expense, edit that expense.</p>`, save, 'Save members');
+      <p class="form-help">Use Change beside a member to update their email. To include a new member in an existing expense, edit that expense.</p>`, save, 'Add members');
   }
 
   function expense(group, existing, save) {

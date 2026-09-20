@@ -98,6 +98,8 @@ main { padding: 35px 48px; }
 .transfer-text strong { font-weight: 600; }
 .transfer-text small, .repayment-text small { display: block; font-size: 11px; color: var(--muted); }
 .transfer-amount { font-weight: 650; white-space: nowrap; }
+.settlement-mode { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.settlement-mode select { padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: #f2edf9; font: inherit; }
 .empty { padding: 40px 22px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.8; }
 .welcome { max-width: 650px; margin: 100px auto; text-align: center; }
 .welcome-icon { display: inline-grid; place-items: center; width: 64px; height: 64px; font-size: 46px; color: var(--accent); background: #2b1d42; border-radius: 16px; margin-bottom: 25px; }

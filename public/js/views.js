@@ -39,9 +39,10 @@ const Views = (() => {
     return {html: html || `<div class="empty">${query ? 'No matching expenses.' : 'No expenses yet. Click + Add expense to get started.'}</div>`, count: expenses.length};
   }
 
-  function transfers(group, canRecord = () => true) {
-    return Split.settlements(group).map(transfer => `<div class="transfer">
-      <div class="transfer-text"><strong>${escape(memberName(group, transfer.from))}</strong> owes <strong>${escape(memberName(group, transfer.to))}</strong></div>
+  function transfers(group, canRecord = () => true, mode = 'simplified') {
+    const transfers = mode === 'direct' ? Split.directSettlements(group) : Split.settlements(group);
+    return transfers.map(transfer => `<div class="transfer">
+      <div class="transfer-text"><strong>${escape(memberName(group, transfer.from))}</strong> owes <strong>${escape(memberName(group, transfer.to))}</strong>${transfer.expense ? `<small>${escape(transfer.expense)}</small>` : ''}</div>
       <span class="transfer-amount">${money(transfer.amount)}</span>${canRecord(transfer) ? `<button class="secondary" data-pay="${escape(transfer.from)}" data-to="${escape(transfer.to)}" data-amount="${transfer.amount}">Record repayment</button>` : ''}
     </div>`).join('') || '<div class="empty">No outstanding balances.</div>';
   }

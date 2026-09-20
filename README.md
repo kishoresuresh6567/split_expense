@@ -37,6 +37,7 @@ Other member emails are optional. A group with only its creator can track monthl
 
 An expense can be edited or deleted only by the person who added it or the member selected as its payer. Older expenses without a recorded creator treat the group creator as the person who added them. Changing an expense's payer changes who may edit it next.
 Only the member receiving a repayment can record or undo it. Recording a repayment confirms money was received; the app does not transfer funds.
+The Balances view offers **Simplified** repayments, which net all expenses into final balances, and **Non simplified (by expense)** repayments, which show each member's share owed to each expense payer. Both views include recorded repayments. Payments that exceed a direct expense debt appear as a payment adjustment in the expense view.
 
 The **Share group** option has been removed. Add a member's email under **Manage members**; their group appears after they sign in. The app sends no invitation email. Previously issued links still work for listed members, but new links cannot be created in the app.
 

@@ -12,6 +12,7 @@
     if (new URLSearchParams(location.hash.slice(1)).get('edit') !== linkToken) location.reload();
   });
   let section = 'expenses';
+  let settlementMode = 'simplified';
   let search = '';
   let toastTimer;
   let user = null;
@@ -127,7 +128,8 @@
     $('#expenses').innerHTML = expenses.html;
     document.querySelectorAll('details').forEach(row => row.open = openIds.includes(row.dataset.expense));
     $('#expense-count').textContent = `${expenses.count} ${expenses.count === 1 ? 'expense' : 'expenses'}`;
-    $('#settlements').innerHTML = Views.transfers(group, transfer => receivesPayment(group, transfer.to));
+    $('#settlement-mode').value = settlementMode;
+    $('#settlements').innerHTML = Views.transfers(group, transfer => receivesPayment(group, transfer.to), settlementMode);
     $('#payments-panel').hidden = !group.payments.length;
     $('#payments').innerHTML = Views.payments(group, payment => receivesPayment(group, payment.to));
     if (group.closed) document.querySelectorAll('[data-edit], [data-delete], [data-pay], [data-undo]').forEach(button => button.hidden = true);
@@ -313,6 +315,7 @@
   $('#close-dialog').onclick = Forms.close;
   $('#cancel').onclick = Forms.close;
   $('#search').oninput = event => { search = event.target.value; render(); };
+  $('#settlement-mode').onchange = event => { settlementMode = event.target.value; render(); };
   for (const name of ['expenses', 'balances']) {
     $(`#${name}-tab`).onclick = () => { section = name; render(); };
   }

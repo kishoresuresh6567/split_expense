@@ -1,4 +1,4 @@
-const {test}=require('node:test');const assert=require('node:assert/strict');const {shares,balances,settlements}=require('../public/js/expense-logic');
+const {test}=require('node:test');const assert=require('node:assert/strict');const {shares,balances,settlements,directSettlements}=require('../public/js/expense-logic');
 const {removeMember}=require('../public/js/expense-logic');
 const {updateExpenseSplit}=require('../public/js/expense-logic');
 const {allocations}=require('../public/js/expense-logic');
@@ -80,4 +80,28 @@ test('Removing unused members preserves existing balances and prevents deleting 
 test('Equal split allocates all paise exactly',()=>{assert.deepEqual(shares(100,['a','b','c']),[{id:'a',amount:34},{id:'b',amount:33},{id:'c',amount:33}]);assert.equal(shares(1,['a','b','c']).reduce((n,s)=>n+s.amount,0),1);});
 test('Only selected members owe, even if payer is excluded',()=>{const g={members:[{id:'a'},{id:'b'},{id:'c'}],expenses:[{amount:101,payer:'a',members:['b','c']}],payments:[]};assert.deepEqual(balances(g),{a:101,b:-51,c:-50});});
 test('Suggested transfers clear balances and repayments prevent double counting',()=>{const g={members:[{id:'a'},{id:'b'},{id:'c'}],expenses:[{amount:100,payer:'a',members:['b','c']},{amount:25,payer:'c',members:['a','c']}],payments:[]};assert.deepEqual(balances(g),{a:87,b:-50,c:-37});g.payments=settlements(g);assert.deepEqual(balances(g),{a:0,b:0,c:0});assert.deepEqual(settlements(g),[]);g.payments.pop();assert.ok(settlements(g).length);});
+test('Non simplified repayments show each expense and account for recorded payments',()=>{
+ const ids=['kishore','suresh','raji','preethi'];
+ const g={members:ids.map(id=>({id})),expenses:[
+  {name:'Dinner',payer:'kishore',amount:100000,members:ids},
+  {name:'Movie',payer:'preethi',amount:200000,members:ids}
+ ],payments:[]};
+ assert.deepEqual(settlements(g),[
+  {from:'suresh',to:'kishore',amount:25000},{from:'suresh',to:'preethi',amount:50000},
+  {from:'raji',to:'preethi',amount:75000}
+ ]);
+ assert.deepEqual(directSettlements(g),[
+  {from:'suresh',to:'kishore',amount:25000,expense:'Dinner'},
+  {from:'raji',to:'kishore',amount:25000,expense:'Dinner'},
+  {from:'preethi',to:'kishore',amount:25000,expense:'Dinner'},
+  {from:'kishore',to:'preethi',amount:50000,expense:'Movie'},
+  {from:'suresh',to:'preethi',amount:50000,expense:'Movie'},
+  {from:'raji',to:'preethi',amount:50000,expense:'Movie'}
+ ]);
+ g.payments.push({from:'suresh',to:'kishore',amount:25000});
+ assert.equal(directSettlements(g).some(item=>item.from==='suresh'&&item.to==='kishore'),false);
+ assert.deepEqual(balances(g),{kishore:0,suresh:-50000,raji:-75000,preethi:125000});
+ g.payments.push({from:'raji',to:'preethi',amount:75000});
+ assert.deepEqual(directSettlements(g).at(-1),{from:'preethi',to:'raji',amount:25000,expense:'Payment adjustment'});
+});
 test('Invalid amounts and repeated members cannot produce a split',()=>{for(const amount of [0,-1,1.5,NaN])assert.throws(()=>shares(amount,['a']));assert.throws(()=>shares(10,[]));assert.throws(()=>shares(10,['a','a']));});

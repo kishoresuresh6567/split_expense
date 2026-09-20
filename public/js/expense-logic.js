@@ -37,6 +37,24 @@
   }
   function balances(g){const b=Object.fromEntries(g.members.map(m=>[m.id,0]));for(const e of g.expenses){b[e.payer]+=e.amount;for(const s of allocations(e))b[s.id]-=s.amount;}for(const p of g.payments){b[p.from]+=p.amount;b[p.to]-=p.amount;}return b;}
   function settlements(g){const b=balances(g),owe=Object.entries(b).filter(x=>x[1]<0).map(([id,n])=>[id,-n]),owed=Object.entries(b).filter(x=>x[1]>0),out=[];let i=0,j=0;while(i<owe.length&&j<owed.length){const amount=Math.min(owe[i][1],owed[j][1]);out.push({from:owe[i][0],to:owed[j][0],amount});owe[i][1]-=amount;owed[j][1]-=amount;if(!owe[i][1])i++;if(!owed[j][1])j++;}return out;}
+  function directSettlements(g){
+    const debts=[];
+    for(const expense of g.expenses){
+      for(const share of allocations(expense))if(share.id!==expense.payer&&share.amount>0)
+        debts.push({from:share.id,to:expense.payer,amount:share.amount,expense:expense.name});
+    }
+    for(const payment of g.payments){
+      let remaining=payment.amount;
+      for(const debt of debts){
+        if(!remaining)break;
+        if(debt.from!==payment.from||debt.to!==payment.to)continue;
+        const applied=Math.min(debt.amount,remaining);
+        debt.amount-=applied;remaining-=applied;
+      }
+      if(remaining>0)debts.push({from:payment.to,to:payment.from,amount:remaining,expense:'Payment adjustment'});
+    }
+    return debts.filter(debt=>debt.amount>0);
+  }
   function memberRemovalReason(g,id){
     if(!g.members.some(m=>m.id===id))return 'This member is no longer in the group.';
     if(g.expenses.some(e=>e.payer===id||e.members.includes(id))||g.payments.some(p=>p.from===id||p.to===id))return 'This member has recorded expenses or repayments. Remove those records first to keep balances accurate.';
@@ -53,5 +71,5 @@
     allocations(next);
     Object.assign(e,next);
   }
-  const api={shares,allocations,decimalUnits,splitMethods,balances,settlements,memberRemovalReason,removeMember,updateExpenseSplit};if(typeof module!=='undefined')module.exports=api;else root.Split=api;
+  const api={shares,allocations,decimalUnits,splitMethods,balances,settlements,directSettlements,memberRemovalReason,removeMember,updateExpenseSplit};if(typeof module!=='undefined')module.exports=api;else root.Split=api;
 })(globalThis);

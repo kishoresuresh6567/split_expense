@@ -11,14 +11,6 @@
   window.addEventListener('hashchange', () => {
     if (new URLSearchParams(location.hash.slice(1)).get('edit') !== linkToken) location.reload();
   });
-  const groupLink = (id, token) => {
-    const url = new URL(location.href);
-    url.search = '';
-    url.hash = '';
-    url.searchParams.set('group', id);
-    url.hash = new URLSearchParams({edit:token}).toString();
-    return url.href;
-  };
   let section = 'expenses';
   let search = '';
   let toastTimer;
@@ -109,7 +101,6 @@
     $('#group-options').open = false;
     $('#closed-group-note').hidden = !group.closed;
     $('#manage-members').hidden = Boolean(group.closed) || !isOwner(group);
-    $('#manage-access').hidden = !isOwner(group);
     $('#group-options').hidden = !isOwner(group);
     $('#add-expense').hidden = Boolean(group.closed);
     $('#close-group').hidden = Boolean(group.closed);
@@ -361,7 +352,7 @@
       if (linkedGroupId && !selectedGroupId && records.has(linkedGroupId)) selectedGroupId = linkedGroupId;
       render();
       $('#group-link-message').textContent = linkedGroupId && !records.has(linkedGroupId)
-        ? 'Ask the creator for the complete shared edit link to open this group.' : '';
+        ? 'This group is not available to your signed-in email.' : '';
     } catch (error) {
       if (epoch === authEpoch) {
         state = {groups:[]}; records.clear(); render();
@@ -378,49 +369,6 @@
     }
   }
 
-  async function manageAccess(replaceLink = false) {
-    const group = currentGroup();
-    if (!isOwner(group)) throw Error('Only the owner can manage access.');
-    const epoch = authEpoch;
-    const token = await Cloud.editLink(group.id, replaceLink);
-    if (epoch !== authEpoch) return;
-    Forms.open('Share group', `<p>Only the creator and listed member emails can open this link after signing in with Google.</p>
-      <label for="invite-link">Group edit link</label>
-      <div class="share-link-row"><input id="invite-link" readonly value="${Views.escape(groupLink(group.id, token))}">
-        <button type="button" class="secondary copy-link" id="copy-group-link" aria-label="Copy group link"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copy</span></button>
-      </div>
-      <p>Share this link with the people you want to edit the group. Replacing it stops the old link from working.</p>
-      <button type="button" class="secondary" id="replace-group-link">Replace link</button>`, async () => {}, 'Done');
-    $('#invite-link').onclick = event => event.target.select();
-    $('#copy-group-link').onclick = async event => {
-      const button = event.currentTarget;
-      const input = $('#invite-link');
-      button.disabled = true;
-      let copied = false;
-      try {
-        await navigator.clipboard.writeText(input.value);
-        copied = true;
-      } catch {
-        // Support browsers where the Clipboard API is unavailable or blocked.
-        if (input.isConnected) {
-          input.focus();
-          input.select();
-          input.setSelectionRange(0, input.value.length);
-          try { copied = document.execCommand('copy'); } catch {}
-        }
-      } finally {
-        button.disabled = false;
-      }
-      if (!button.isConnected) return;
-      button.querySelector('span').textContent = copied ? 'Copied!' : 'Copy';
-      notify(copied ? 'Group link copied.' : 'Could not copy automatically. Select and copy the link above.');
-    };
-    $('#replace-group-link').onclick = () => {
-      Forms.confirm('Replace group link?', 'Anyone using the old link will need the new one.', () => manageAccess(true), 'Replace link');
-    };
-  }
-
-  $('#manage-access').onclick = () => manageAccess().catch(error => notify(error.message));
   $('#refresh-groups').onclick = () => refresh().then(() => notify('Groups refreshed.')).catch(error => notify(error.message));
   $('#sign-in-submit').onclick = async () => {
     $('#sign-in-submit').disabled = true;
@@ -460,7 +408,7 @@
     closeGroups();
     try {
       const local = readState(localStorage.getItem(STORAGE_KEY));
-      Forms.confirm('Import browser groups?', `Import ${local.groups.length} groups into ${user.email}? You will own them. Use Share group to give others an edit link. The local copy remains in this browser until you remove it.`, async () => {
+      Forms.confirm('Import browser groups?', `Import ${local.groups.length} groups into ${user.email}? You will own them. Add other members by email under Manage members. The local copy remains in this browser until you remove it.`, async () => {
         const accountId = user.id;
         for (const group of local.groups) {
           if (user?.id !== accountId) throw Error('Account changed. Import stopped.');
@@ -471,7 +419,7 @@
           // Preserve IDs so retrying after a partial import does not duplicate data.
           await commit(next => next.groups.push(group));
         }
-        notify('Groups imported. Use Share group to get an edit link.');
+        notify('Groups imported. Add other members by email under Manage members.');
       }, 'Import into my account');
     } catch (error) { notify(error.message); }
   };
@@ -510,7 +458,7 @@
     }, 0);
   }
   render();
-  if (linkedGroupId && !linkToken) $('#auth-description').textContent = 'Sign in with Google to open a group. Ask its creator for the complete shared edit link.';
+  if (linkedGroupId && !linkToken) $('#auth-description').textContent = 'Sign in with Google. This group will appear if your email is listed.';
   if (!window.Cloud?.configured) {
     $('#auth-description').textContent = 'Sign-in is not available yet. Please contact the app owner. Existing browser data has not been changed.';
     if (linkToken) $('#group-link-message').textContent = 'Group access is not configured yet. Please contact the app owner.';

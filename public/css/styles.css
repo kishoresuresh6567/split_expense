@@ -171,7 +171,4 @@ input:not([type=checkbox]), select { width: 100%; border: 1px solid #443750; bor
   .welcome { margin: 35px auto; }
 }
 #auth-message { overflow-wrap: anywhere; }
-.share-link-row { display: flex; align-items: stretch; gap: 8px; }
-.share-link-row input { flex: 1; min-width: 0; margin: 0; }
-.copy-link { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex-shrink: 0; white-space: nowrap; }
 #groups-drawer > .secondary { margin-top: 12px; width: 100%; }

@@ -32,20 +32,16 @@ Everyone chooses **Continue with Google**. On first sign-in the app asks each pe
 
 Other member emails are optional. A group with only its creator can track monthly spending or solo travel costs. Expenses in a one-member group have no repayment balance, and other members can be added later.
 
-To send a direct link to someone already listed by email, choose **Share group**, copy its **Group edit link**, and send it yourself. A recipient must sign in with their listed Google email before opening the link. The app sends no invitation email.
-
-Share links from your public website, not `localhost`: on another person's phone, `localhost` points to their own phone. Opening the deployed app and copying its link produces the public URL.
-
-Links contain a random key in the URL fragment (`#edit=...`). The fragment is excluded from normal HTTP page requests and referrer headers. The link cannot grant access to an unlisted email. **Replace link** invalidates the old key for subsequent reads and writes, while preserving the group and its data. Information already viewed or copied cannot be removed.
+The **Share group** option has been removed. Add a member's email under **Manage members**; their group appears after they sign in. The app sends no invitation email. Previously issued links still work for listed members, but new links cannot be created in the app.
 
 | Action | Creator | Listed email | Unlisted email |
 | --- | --- | --- | --- |
 | View expenses and balances | Yes | Yes | No |
 | Add/edit/delete expenses; record/undo repayments | Yes | Yes | No |
 | Manage participants and their access emails | Yes | No | No |
-| Close/reopen/delete group; replace link | Yes | No | No |
+| Close/reopen/delete group | Yes | No | No |
 
-Closed groups remain readable by listed members and through their links; only the creator can reopen them. Link mode shows only the linked group, even if the browser has a signed-in creator account. **Go to my account** leaves link mode.
+Closed groups remain readable by listed members; only the creator can reopen them. A previously issued link shows only its linked group. **Go to my account** leaves link mode.
 
 The creator-and-link migration removes the obsolete invitation RPCs and stops account memberships from granting access. Historical membership/invitation records are retained without client access, and group documents and existing edit links are preserved. Historical migrations remain in the repository so both new and existing databases can be upgraded safely.
 
@@ -58,8 +54,6 @@ RLS protects ordinary table access. Dedicated database functions validate the ed
 For older browser-only data, sign in on the same browser and app address and choose **Import browser groups**. You become the creator of the imported groups. IDs, expenses, splits and repayments are preserved; retries skip groups you already own. The original `gather-expenses-v2` localStorage backup remains untouched.
 
 ## Troubleshooting
-
-If **Share group** reports `Could not find the function public.gather_edit_link(gid, replace_link) in the schema cache`, run the entire [edit link migration](supabase/migrations/202609160002_group_edit_links.sql) in the Supabase project used by the app. It can be rerun without changing existing links or deleting data, and refreshes the schema cache. Reload the app afterward.
 
 If the functions are installed but the cache is stale, run `NOTIFY pgrst, 'reload schema';` as described in [Supabase's instructions](https://supabase.com/docs/guides/troubleshooting/refresh-postgrest-schema).
 

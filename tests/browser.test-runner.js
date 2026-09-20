@@ -123,14 +123,16 @@ async function main(){
  await call('Page.reload',{},sessionId);
  for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate('document.readyState === "complete" && !!document.querySelector("[data-delete]")'))break;}
  assert.equal(await evaluate(`document.querySelectorAll('#expenses .expense-row').length`),1,'Saved expense survives reload');
- await run(`document.querySelector('#manage-access').click()`);
- assert.match(await evaluate(`document.querySelector('#fields').textContent`),/signed in with Google/);
- const oldLink = await evaluate(`document.querySelector('#invite-link').value`);
+ assert.equal(await evaluate(`document.querySelector('#manage-access') === null`),true,'Share group option is removed');
+ const linkedId = await evaluate(`JSON.parse(sessionStorage.getItem('gather-test-cloud'))[0].id`);
+ const sharedPageUrl = await evaluate(`location.href`);
+ const makeLink = token => { const url = new URL(sharedPageUrl); url.search = ''; url.hash = ''; url.searchParams.set('group',linkedId); url.hash = new URLSearchParams({edit:token}).toString(); return url.href; };
+ const oldToken = await evaluate(`window.__testCloud.editLink('${linkedId}')`);
+ const oldLink = makeLink(oldToken);
  assert.match(new URL(oldLink).hash, /^#edit=[0-9a-f]{64}$/,'Shared link contains an unguessable edit key');
- await run(`document.querySelector('#replace-group-link').click();document.querySelector('#submit').click()`);
- const sharedGroupLink = await evaluate(`document.querySelector('#invite-link').value`);
+ const newToken = await evaluate(`window.__testCloud.editLink('${linkedId}', true)`);
+ const sharedGroupLink = makeLink(newToken);
  assert.notEqual(sharedGroupLink,oldLink,'Owner can replace an edit link');
- await run(`document.querySelector('#submit').click()`);
  await evaluate(`window.__testCloud.setAccount(null)`);
  await call('Page.navigate',{url:oldLink},sessionId);
  assert.equal(await evaluate(`document.querySelector('#auth-panel').hidden`),false,'Shared links prompt for Google sign-in');

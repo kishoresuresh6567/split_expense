@@ -28,7 +28,6 @@ window.Cloud = {
   create(doc) { return rpc('create_group', {doc}, true); },
   save(gid, doc, expected_version) { return rpc('save_group', {gid, doc, expected_version}, true); },
   remove(gid, expected_version) { return rpc('delete_group', {gid, expected_version}); },
-  editLink(gid, replace_link = false) { return rpc('edit_link', {gid, replace_link}); },
   readLink(link_token) { return rpc('read_link', {link_token}, true); },
   saveLink(link_token, doc, expected_version) { return rpc('save_link', {link_token, doc, expected_version}, true); }
 };

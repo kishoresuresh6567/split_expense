@@ -26,6 +26,7 @@
     const payerEmail = group.members.find(member => member.id === expense.payer)?.email?.toLowerCase();
     return Boolean(user && (creatorId === user.id || payerEmail === user.email?.toLowerCase()));
   };
+  const receivesPayment = (group, memberId) => Boolean(user && group.members.find(member => member.id === memberId)?.email?.toLowerCase() === user.email?.toLowerCase());
 
   const newId = () => typeof crypto.randomUUID === 'function' ? crypto.randomUUID()
     : Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -126,9 +127,9 @@
     $('#expenses').innerHTML = expenses.html;
     document.querySelectorAll('details').forEach(row => row.open = openIds.includes(row.dataset.expense));
     $('#expense-count').textContent = `${expenses.count} ${expenses.count === 1 ? 'expense' : 'expenses'}`;
-    $('#settlements').innerHTML = Views.transfers(group);
+    $('#settlements').innerHTML = Views.transfers(group, transfer => receivesPayment(group, transfer.to));
     $('#payments-panel').hidden = !group.payments.length;
-    $('#payments').innerHTML = Views.payments(group);
+    $('#payments').innerHTML = Views.payments(group, payment => receivesPayment(group, payment.to));
     if (group.closed) document.querySelectorAll('[data-edit], [data-delete], [data-pay], [data-undo]').forEach(button => button.hidden = true);
   }
 
@@ -250,12 +251,15 @@
         }, 'Expense deleted.');
       }, 'Delete expense');
     } else if (dataset.pay) {
+      if (!receivesPayment(group, dataset.to)) throw Error('Only the member receiving this repayment can record it.');
       const payment = {id: newId(), from: dataset.pay, to: dataset.to, amount: Number(dataset.amount), date: Forms.today()};
       const message = `Has ${Views.memberName(group, payment.from)} paid ${Views.money(payment.amount)} to ${Views.memberName(group, payment.to)}? This records a payment; it does not transfer money.`;
       Forms.confirm('Record repayment', message, async () => {
         await commit(next => next.groups.find(item => item.id === group.id).payments.push(payment), 'Repayment recorded.');
       }, 'Confirm repayment');
     } else if (dataset.undo) {
+      const recorded = group.payments.find(payment => payment.id === dataset.undo);
+      if (!recorded || !receivesPayment(group, recorded.to)) throw Error('Only the member receiving this repayment can undo it.');
       Forms.confirm('Undo repayment?', 'This removes the repayment record and restores the outstanding balance.', async () => {
         await commit(next => {
           const target = next.groups.find(item => item.id === group.id);

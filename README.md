@@ -14,6 +14,7 @@ Shared expenses with Google sign-in for everyone, including people opening edita
    - [Member display names](supabase/migrations/202609200004_member_display_names.sql)
    - [Member management](supabase/migrations/202609200005_member_management.sql)
    - [Expense editors](supabase/migrations/202609200006_expense_editors.sql)
+   - [Repayment recipient](supabase/migrations/202609200007_repayment_recipient.sql)
 2. Enable **Google** in Supabase **Authentication ? Sign In / Providers** and enter your Google OAuth client ID and secret. In Google Cloud, configure a web OAuth client using the callback URL shown by Supabase (`https://YOUR_PROJECT.supabase.co/auth/v1/callback`). Follow the [Supabase Google setup guide](https://supabase.com/docs/guides/auth/social-login/auth-google).
 3. Set the production website as Supabase's **Site URL** and allow its exact URL under **Redirect URLs**. Allow `http://localhost:3000/` for local development (or the actual port). Configure your Google OAuth app's audience/test users as needed. Google sign-in must be enabled in the hosted project; deploying code does not enable a provider.
 4. The app no longer uses Supabase email/password signup, password resets, magic links or invitations. After confirming existing creators can access their groups through Google, disable the Email auth provider if you want to prevent those methods at the hosted API as well. Use the same Google email as the existing creator account; Supabase supports [automatic identity linking](https://supabase.com/docs/guides/auth/auth-identity-linking) for matching emails.
@@ -35,13 +36,16 @@ Everyone chooses **Continue with Google**. On first sign-in the app asks each pe
 Other member emails are optional. A group with only its creator can track monthly spending or solo travel costs. Expenses in a one-member group have no repayment balance, and other members can be added later.
 
 An expense can be edited or deleted only by the person who added it or the member selected as its payer. Older expenses without a recorded creator treat the group creator as the person who added them. Changing an expense's payer changes who may edit it next.
+Only the member receiving a repayment can record or undo it. Recording a repayment confirms money was received; the app does not transfer funds.
 
 The **Share group** option has been removed. Add a member's email under **Manage members**; their group appears after they sign in. The app sends no invitation email. Previously issued links still work for listed members, but new links cannot be created in the app.
 
 | Action | Creator | Listed email | Unlisted email |
 | --- | --- | --- | --- |
 | View expenses and balances | Yes | Yes | No |
-| Add/edit/delete expenses; record/undo repayments | Yes | Yes | No |
+| Add expenses | Yes | Yes | No |
+| Edit/delete an expense | If adder or payer | If adder or payer | No |
+| Record/undo a repayment | If recipient | If recipient | No |
 | Manage participants and their access emails | Yes | Yes | No |
 | Close/reopen/delete group | Yes | No | No |
 

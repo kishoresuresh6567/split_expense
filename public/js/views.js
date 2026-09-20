@@ -39,16 +39,16 @@ const Views = (() => {
     return {html: html || `<div class="empty">${query ? 'No matching expenses.' : 'No expenses yet. Click + Add expense to get started.'}</div>`, count: expenses.length};
   }
 
-  function transfers(group) {
+  function transfers(group, canRecord = () => true) {
     return Split.settlements(group).map(transfer => `<div class="transfer">
       <div class="transfer-text"><strong>${escape(memberName(group, transfer.from))}</strong> owes <strong>${escape(memberName(group, transfer.to))}</strong></div>
-      <span class="transfer-amount">${money(transfer.amount)}</span><button class="secondary" data-pay="${escape(transfer.from)}" data-to="${escape(transfer.to)}" data-amount="${transfer.amount}">Record repayment</button>
+      <span class="transfer-amount">${money(transfer.amount)}</span>${canRecord(transfer) ? `<button class="secondary" data-pay="${escape(transfer.from)}" data-to="${escape(transfer.to)}" data-amount="${transfer.amount}">Record repayment</button>` : ''}
     </div>`).join('') || '<div class="empty">No outstanding balances.</div>';
   }
 
-  function payments(group) {
+  function payments(group, canUndo = () => true) {
     return group.payments.map(payment => `<div class="repayment-row"><div class="repayment-text">${escape(memberName(group, payment.from))} paid ${escape(memberName(group, payment.to))}<small>${date(payment.date)}</small></div>
-      <span class="transfer-amount">${money(payment.amount)}</span><button class="danger" data-undo="${escape(payment.id)}">Undo</button></div>`).join('');
+      <span class="transfer-amount">${money(payment.amount)}</span>${canUndo(payment) ? `<button class="danger" data-undo="${escape(payment.id)}">Undo</button>` : ''}</div>`).join('');
   }
 
   function members(group) {

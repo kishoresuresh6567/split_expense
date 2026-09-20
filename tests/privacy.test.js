@@ -313,4 +313,26 @@ test('Supabase privacy rules execute in Postgres for owner, invitee, outsider an
     await login(2);
     assert.equal((await rpc('save_group',[legacy.id,{...legacy,expenses:[{...legacy.expenses[0],name:'Payer can edit old expense'}]},1])).version,2);
   });
+  await t.test('only the repayment recipient can record or undo it', async () => {
+    await db.exec('reset role');
+    await db.exec(fs.readFileSync(path.join(__dirname, '../supabase/migrations/202609200007_repayment_recipient.sql'),'utf8'));
+    const group = {...doc,id:uid(70),expenses:[],payments:[],members:[
+      {id:'a',email:'owner@example.com'}, {id:'b',email:'member@example.com'}, {id:'c',email:'outsider@example.com'}
+    ]};
+    const payment = {id:'repayment',from:'b',to:'a',amount:100,date:'2026-09-20'};
+    await login(1);
+    await rpc('create_group',[group]);
+    const token = await rpc('edit_link',[group.id,false]);
+    await login(2);
+    await assert.rejects(rpc('save_group',[group.id,{...group,payments:[payment]},1]),/receiving a repayment/);
+    await assert.rejects(rpc('save_link',[token,{...group,payments:[payment]},1]),/receiving a repayment/);
+    await assert.rejects(rpc('save_group',[group.id,{...group,members:[{id:'a',email:'member@example.com'},...group.members.slice(1)],payments:[payment]},1]),/receiving a repayment/);
+    await login(1);
+    assert.equal((await rpc('save_group',[group.id,{...group,payments:[payment]},1])).version,2);
+    await login(2);
+    await assert.rejects(rpc('save_group',[group.id,group,2]),/receiving a repayment/);
+    await assert.rejects(rpc('save_group',[group.id,{...group,payments:[{...payment,amount:500}]},2]),/receiving a repayment/);
+    await login(1);
+    assert.equal((await rpc('save_link',[token,group,2])).version,3);
+  });
 });

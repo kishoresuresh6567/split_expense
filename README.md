@@ -10,6 +10,8 @@ Shared expenses with Google sign-in for everyone, including people opening edita
    - [Creator and link access](supabase/migrations/202609160003_creator_and_link_access.sql)
    - [Google sign-in for shared links](supabase/migrations/202609200001_google_sign_in_for_links.sql)
    - [Member email access](supabase/migrations/202609200002_member_email_access.sql)
+   - [Links require listed email](supabase/migrations/202609200003_links_require_listed_email.sql)
+   - [Member display names](supabase/migrations/202609200004_member_display_names.sql)
 2. Enable **Google** in Supabase **Authentication ? Sign In / Providers** and enter your Google OAuth client ID and secret. In Google Cloud, configure a web OAuth client using the callback URL shown by Supabase (`https://YOUR_PROJECT.supabase.co/auth/v1/callback`). Follow the [Supabase Google setup guide](https://supabase.com/docs/guides/auth/social-login/auth-google).
 3. Set the production website as Supabase's **Site URL** and allow its exact URL under **Redirect URLs**. Allow `http://localhost:3000/` for local development (or the actual port). Configure your Google OAuth app's audience/test users as needed. Google sign-in must be enabled in the hosted project; deploying code does not enable a provider.
 4. The app no longer uses Supabase email/password signup, password resets, magic links or invitations. After confirming existing creators can access their groups through Google, disable the Email auth provider if you want to prevent those methods at the hosted API as well. Use the same Google email as the existing creator account; Supabase supports [automatic identity linking](https://supabase.com/docs/guides/auth/auth-identity-linking) for matching emails.
@@ -26,18 +28,18 @@ Shared expenses with Google sign-in for everyone, including people opening edita
 
 ## Group access
 
-Everyone chooses **Continue with Google**. Creators can add an optional Google email for each participant when creating a group or under **Manage members**. After signing in with that address, the participant sees the group in their normal group list without a shared URL. The creator alone can assign or remove access emails; removing an email revokes that access.
+Everyone chooses **Continue with Google**. On first sign-in the app asks each person for the name they want other group members to see; they can change it later using **Edit my name**. Creators add participants by email address when creating a group or under **Manage members**. Expense and balance screens show the person's chosen name when available, and their email otherwise. After signing in with the listed address, a participant sees the group in their normal group list without a shared URL. An unlisted address has no access to that group. The creator alone can change member emails; removing an email revokes that access.
 
-To share with someone who is not listed by email, choose **Share group**, copy its **Group edit link**, and send it yourself. A recipient must sign in with Google before opening the link. The app sends no invitation email.
+To send a direct link to someone already listed by email, choose **Share group**, copy its **Group edit link**, and send it yourself. A recipient must sign in with their listed Google email before opening the link. The app sends no invitation email.
 
 Share links from your public website, not `localhost`: on another person's phone, `localhost` points to their own phone. Opening the deployed app and copying its link produces the public URL.
 
-Links contain a random bearer key in the URL fragment (`#edit=...`). The fragment is excluded from normal HTTP page requests and referrer headers. Share the full link; anyone signed in with Google who receives or forwards it can edit. A group ID alone grants no access. **Replace link** invalidates the old key for subsequent reads and writes, while preserving the group and its data. Information already viewed or copied cannot be removed.
+Links contain a random key in the URL fragment (`#edit=...`). The fragment is excluded from normal HTTP page requests and referrer headers. The link cannot grant access to an unlisted email. **Replace link** invalidates the old key for subsequent reads and writes, while preserving the group and its data. Information already viewed or copied cannot be removed.
 
-| Action | Creator | Listed email | Signed-in link holder |
+| Action | Creator | Listed email | Unlisted email |
 | --- | --- | --- | --- |
-| View expenses and balances | Yes | Yes | Yes |
-| Add/edit/delete expenses; record/undo repayments | Yes | Yes | Yes |
+| View expenses and balances | Yes | Yes | No |
+| Add/edit/delete expenses; record/undo repayments | Yes | Yes | No |
 | Manage participants and their access emails | Yes | No | No |
 | Close/reopen/delete group; replace link | Yes | No | No |
 
@@ -72,6 +74,6 @@ npm.cmd run test:browser
 
 The development server normally uses port 3000 and tries the next port when busy. Rebuild/restart after frontend changes. Missing local configuration displays a setup message.
 
-Tests execute the SQL migrations in PGlite (embedded Postgres), including the upgrade from anonymous links to signed-in link access, replacement, group isolation and stale writes. Adapter tests cover Google login and link RPCs. The browser suite uses a test-only cloud fixture and checks sign-in errors, group workflows, signed-in link edits and persistence. It does not test real Google OAuth or hosted Supabase; verify Google sign-in for creators and shared-link visitors on the deployed site. Set `CHROME_PATH` if needed or `TEST_URL` to use a running build. Fixtures are never deployed.
+Tests execute the SQL migrations in PGlite (embedded Postgres), including signed-in link access, member email access, profile name visibility, group isolation and stale writes. Adapter tests cover Google login, profile names and link RPCs. The browser suite uses a test-only cloud fixture and checks the name prompt, sign-in errors, group workflows, signed-in link edits and persistence. It does not test real Google OAuth or hosted Supabase; verify Google sign-in for creators and members on the deployed site. Set `CHROME_PATH` if needed or `TEST_URL` to use a running build. Fixtures are never deployed.
 
 Amounts use integer paise. Splits support even, exact amounts, weighted shares and percentages. Repayments adjust balances without transferring money.

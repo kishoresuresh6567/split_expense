@@ -15,6 +15,21 @@
       fixture.setAccount(owner);
     },
     signOut:async () => fixture.setAccount(null),
+    myName:async () => account ? sessionStorage.getItem(`gather-test-name-${account.id}`) : null,
+    setMyName:async name => {
+      if (!account) throw Error('Sign in first.');
+      sessionStorage.setItem(`gather-test-name-${account.id}`, name);
+      return name;
+    },
+    memberNames:async gid => {
+      const row = load().find(item => item.id === gid);
+      if (!row) return [];
+      return row.document.members.flatMap(member => {
+        const user = [owner, account].find(item => item?.email === member.email);
+        const name = user && sessionStorage.getItem(`gather-test-name-${user.id}`);
+        return name ? [{email:member.email, display_name:name}] : [];
+      });
+    },
     setAccount(user) {
       account = user; sessionStorage.setItem('gather-test-account',JSON.stringify(user));
       callback?.(user ? {user} : null);
@@ -34,6 +49,7 @@
       const gid = Object.keys(links).find(id => links[id] === token);
       const row = load().find(item => item.id === gid);
       if (!row) throw Error('This group link is invalid or has been replaced.');
+      if (row.owner_id !== account.id && !row.document.members.some(member => member.email === account.email)) throw Error('Group unavailable. Sign in with an email listed in this group.');
       return {id:row.id,document:row.document,version:row.version};
     },
     saveLink:async (token, doc, version) => {

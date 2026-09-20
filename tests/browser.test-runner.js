@@ -44,6 +44,9 @@ async function main(){
  assert.equal(await evaluate(`document.querySelector('#sign-in-submit').disabled`),false,'Sign-in can be retried after failure');
  await evaluate(`window.__testCloud.failSignIn=false;document.querySelector('#sign-in-submit').click()`);
  await new Promise(resolve=>setTimeout(resolve,100));
+ assert.equal(await evaluate(`document.querySelector('#dialog-title').textContent`),'Your name','First sign-in asks for a name');
+ await evaluate(`document.querySelector('#profile-name').value='Alex';document.querySelector('#submit').click()`);
+ await new Promise(resolve=>setTimeout(resolve,100));
  const run=async code=>{const result=await evaluate(`(async()=>{${code};await new Promise(resolve=>setTimeout(resolve,60));return document.querySelector('#error').textContent;})()`);assert.equal(result,'');};
  await run(`document.querySelector('#groups-toggle').click()`);
  assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),true);
@@ -52,14 +55,15 @@ async function main(){
  await run(`document.querySelector('#groups-toggle').click();document.querySelector('#create-group').click()`);
  assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),false);
  assert.equal(await evaluate(`document.querySelector('#dialog').open`),true);
- await run(`document.querySelector('#group-name').value='Browser test';document.querySelector('#member-names').value='Alex, Bea, Casey';document.querySelector('#member-emails').value=', , guest@example.com';document.querySelector('#submit').click()`);
+ await run(`document.querySelector('#group-name').value='Browser test';document.querySelector('#member-emails').value='alex@example.com, bea@example.com, guest@example.com';document.querySelector('#submit').click()`);
  assert.equal(await evaluate(`document.querySelector('#dialog').open`),false);
  assert.equal(await evaluate(`document.querySelector('#group-count').textContent`),'1');
+ assert.equal(await evaluate(`JSON.parse(sessionStorage.getItem('gather-test-cloud'))[0].document.members.every(member => member.email && !('name' in member))`),true,'New members are stored by email only');
  await run(`document.querySelector('#groups-toggle').click()`);
  assert.equal(await evaluate(`document.querySelectorAll('#group-nav [data-group]').length`),1);
  await run(`document.querySelector('#group-nav [data-group]').click()`);
  assert.equal(await evaluate(`document.querySelector('#groups-drawer').open`),false);
- await run(`document.querySelector('#manage-members').click();document.querySelector('#new-members').value='Drew';document.querySelector('#submit').click()`);
+ await run(`document.querySelector('#manage-members').click();document.querySelector('#new-member-emails').value='drew@example.com';document.querySelector('#submit').click()`);
  await run(`document.querySelector('#add-expense').click();document.querySelector('#description').value='Lunch';document.querySelector('#amount').value='100';document.querySelectorAll('[name=member]')[3].click();document.querySelector('#submit').click()`);
  assert.equal(await evaluate(`document.querySelectorAll('.expense-row').length`),1);
  await run(`document.querySelector('#manage-members').click()`);
@@ -75,7 +79,7 @@ async function main(){
  assert.equal(await evaluate(`document.querySelector('#payments-panel').hidden`),false);
  await run(`document.querySelector('[data-undo]').click();document.querySelector('#submit').click()`);
  assert.equal(await evaluate(`document.querySelector('#payments-panel').hidden`),true);
- await run(`document.querySelector('#expenses-tab').click();document.querySelector('#manage-members').click();document.querySelector('#new-members').value='Erin, Finn';document.querySelector('#submit').click()`);
+ await run(`document.querySelector('#expenses-tab').click();document.querySelector('#manage-members').click();document.querySelector('#new-member-emails').value='erin@example.com, finn@example.com';document.querySelector('#submit').click()`);
  await run(`document.querySelector('[data-edit]').click()`);
  assert.equal(await evaluate(`document.querySelectorAll('#member-checks input[type=checkbox]').length`),5);
  assert.equal(await evaluate(`document.querySelectorAll('#member-checks input[type=checkbox]:checked').length`),3,'Existing selections are preserved');
@@ -124,6 +128,8 @@ async function main(){
  assert.equal(await evaluate(`document.querySelector('#group-workspace').hidden`),true,'Signed-out visitors cannot open a group');
  await evaluate(`document.querySelector('#sign-in-submit').click()`);
  await evaluate(`window.__testCloud.setAccount({id:'00000000-0000-4000-8000-000000000002',email:'guest@example.com'})`);
+ for(let i=0;i<30;i++){await new Promise(r=>setTimeout(r,50));if(await evaluate(`document.querySelector('#dialog-title')?.textContent === 'Your name'`))break;}
+ await evaluate(`document.querySelector('#profile-name').value='Guest';document.querySelector('#submit').click()`);
  for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,100));if(await evaluate(`document.querySelector('#group-link-message')?.textContent.includes('invalid')`))break;}
  assert.equal(await evaluate(`document.querySelector('#group-workspace').hidden`),true,'Replaced link does not expose the group');
  await call('Page.navigate',{url:sharedGroupLink},sessionId);

@@ -43,3 +43,17 @@ test('link visitors use only link RPCs, without member lookup', async () => {
   assert.equal(calls[1].args.link_token,'secret');
   assert.equal(calls[1].args.expected_version,1);
 });
+
+test('profile names use the signed-in user RPCs', async () => {
+  const calls = [];
+  const cloud = loadCloud({rpc:(name,args) => {
+    calls.push({name,args});
+    return Promise.resolve({data:name === 'gather_member_names' ? [{email:'member@example.com',display_name:'Member'}] : 'Member',error:null});
+  }});
+  assert.equal(await cloud.myName(),'Member');
+  assert.equal(await cloud.setMyName('Member'),'Member');
+  assert.deepEqual(await cloud.memberNames('group'),[{email:'member@example.com',display_name:'Member'}]);
+  assert.deepEqual(calls.map(call => call.name),['gather_my_name','gather_set_my_name','gather_member_names']);
+  assert.equal(calls[1].args.new_name,'Member');
+  assert.equal(calls[2].args.gid,'group');
+});

@@ -3,7 +3,14 @@ const Views = (() => {
   const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const currency = new Intl.NumberFormat('en-IN', {style:'currency', currency:'INR'});
   const money = amount => currency.format(amount / 100);
-  const memberName = (group, id) => group.members.find(member => member.id === id)?.name || 'Unknown member';
+  let names = new Map();
+  const setNames = entries => { names = new Map(entries); };
+  const setName = (email, name) => { names.set(email.toLowerCase(), name); };
+  const memberLabel = member => names.get(member?.email?.toLowerCase()) || member?.email || member?.name || 'Unknown member';
+  const memberName = (group, id) => {
+    const member = group.members.find(member => member.id === id);
+    return memberLabel(member);
+  };
   const date = value => new Date(value + 'T12:00:00').toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'});
 
   function groups(items, selectedId) {
@@ -47,9 +54,9 @@ const Views = (() => {
   function members(group) {
     return group.members.map(member => {
       const reason = Split.memberRemovalReason(group, member.id);
-      return `<div class="member-row"><div class="member-info">${escape(member.name)}${reason ? `<small>${escape(reason)}</small>` : ''}</div>
-        <button type="button" class="danger" data-remove-member="${escape(member.id)}" aria-label="Remove ${escape(member.name)}" ${reason ? 'disabled' : ''}>Remove</button></div>`;
+      return `<div class="member-row"><div class="member-info">${escape(memberLabel(member))}${member.email && names.has(member.email.toLowerCase()) ? `<small>${escape(member.email)}</small>` : ''}${reason ? `<small>${escape(reason)}</small>` : ''}</div>
+        <button type="button" class="danger" data-remove-member="${escape(member.id)}" aria-label="Remove ${escape(memberLabel(member))}" ${reason ? 'disabled' : ''}>Remove</button></div>`;
     }).join('');
   }
-  return {escape, money, memberName, groups, summary, expenseRows, transfers, payments, members};
+  return {escape, money, memberName, memberLabel, setNames, setName, groups, summary, expenseRows, transfers, payments, members};
 })();

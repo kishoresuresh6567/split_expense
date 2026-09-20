@@ -21,6 +21,9 @@ window.Cloud = {
     }}));
   },
   signOut() { return result(client.auth.signOut({scope:'local'})); },
+  myName() { return rpc('my_name', {}); },
+  setMyName(new_name) { return rpc('set_my_name', {new_name}); },
+  memberNames(gid) { return rpc('member_names', {gid}); },
   groups() { return result(client.from('gather_groups').select('*').order('created_at')); },
   create(doc) { return rpc('create_group', {doc}, true); },
   save(gid, doc, expected_version) { return rpc('save_group', {gid, doc, expected_version}, true); },

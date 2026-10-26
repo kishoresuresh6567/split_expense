@@ -27,11 +27,37 @@
     <button class="secondary" id="sign-out">Sign out</button>
   </dialog>
   <main>
-    <section id="auth-panel" class="welcome">
-      <h1>Create and share a group</h1>
-      <p id="auth-description">Continue with Google to create a group or open a shared edit link.</p>
-      <button type="button" class="primary" id="sign-in-submit" hidden>Continue with Google</button>
-      <p id="auth-message" role="status"></p>
+    <section id="auth-panel" class="landing" aria-labelledby="landing-title">
+      <div class="landing-hero">
+        <div class="landing-copy">
+          <p class="landing-eyebrow">GOOD TIMES. CLEAR BALANCES.</p>
+          <h1 id="landing-title">Share the moment.<br><span>Split the cost.</span></h1>
+          <p class="landing-intro">From a weekend away to everyday living, keep shared expenses together and know who owes whom.</p>
+          <div class="landing-sign-in">
+            <button type="button" class="primary" id="sign-in-submit" hidden>Continue with Google</button>
+            <p id="auth-description">Sign in to create a group or access expenses shared with your email.</p>
+            <p id="auth-message" role="status"></p>
+          </div>
+          <div class="landing-occasions"><span>Trips with friends</span><span>Shared homes</span><span>Everyday spending</span></div>
+        </div>
+        <div class="landing-preview" aria-label="Illustrative example of a shared trip">
+          <div class="preview-topline"><span class="preview-label">A LITTLE LESS MATH. A LOT MORE TOGETHER.</span><span class="preview-dot" aria-hidden="true"></span></div>
+          <div class="preview-heading"><div><p>YOUR NEXT ADVENTURE</p><h2>Weekend in Goa</h2></div><span class="preview-trip-icon" aria-hidden="true">&#9728;</span></div>
+          <div class="preview-members"><span>A</span><span>M</span><span>R</span><p>3 friends. One shared tab.</p></div>
+          <div class="preview-total"><span>Total expenses</span><strong>&#8377;9,600<span>.00</span></strong></div>
+          <div class="preview-expense"><span class="preview-expense-icon" aria-hidden="true">&#8962;</span><div><strong>Our seaside stay</strong><small>Alex paid &middot; Split equally</small></div><b>&#8377;7,200</b></div>
+          <div class="preview-expense"><span class="preview-expense-icon" aria-hidden="true">&#9749;</span><div><strong>Dinner by the beach</strong><small>Maya paid &middot; Split equally</small></div><b>&#8377;2,400</b></div>
+          <div class="preview-balance"><span class="balance-check" aria-hidden="true">&#10003;</span><div><strong>All the costs. A clear picture.</strong><p>Rohan owes Alex &#8377;3,200</p></div><span aria-hidden="true">&#8599;</span></div>
+          <p class="preview-caption">Example group &middot; Your own story starts after sign-in</p>
+          <button type="button" class="preview-pause" id="preview-pause" aria-pressed="false">Pause examples</button>
+        </div>
+      </div>
+      <div class="landing-steps" aria-label="How Gather works">
+        <article><span>01 / GATHER YOUR PEOPLE</span><h2>One group for every plan.</h2><p>Create a group and add members by email. Keep each trip, household, or personal budget in its own space.</p></article>
+        <article><span>02 / ADD THE EVERYDAY</span><h2>You pay. Gather keeps track.</h2><p>Record a cost, choose who shares it, and see everyone's share without chasing scattered messages.</p></article>
+        <article><span>03 / KEEP THINGS CLEAR</span><h2>Less calculating. More living.</h2><p>See who owes whom and record repayments after the money is paid. Everyone stays on the same page.</p></article>
+      </div>
+      <footer class="landing-footer"><span>Gather &mdash; made for shared moments.</span><span>Access is limited to listed member emails.</span></footer>
     </section>
     <p id="group-link-message" role="status"></p>
     <a id="leave-link" href="./" hidden>Go to my account</a>
@@ -89,5 +115,6 @@
   <script src="./js/forms.js"></script>
   <script src="./js/cloud.js"></script>
   <script src="./js/app.js"></script>
+  <script src="./js/landing.js"></script>
 </body>
 </html>

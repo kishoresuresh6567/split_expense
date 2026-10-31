@@ -54,7 +54,9 @@ body:has(#groups-drawer[open]) { overflow: hidden; }
 .menu-empty { font-size: 12px; margin: 8px 10px 18px; }
 .group-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .group-options { position: relative; }
-.group-options summary { cursor: pointer; list-style: none; }
+.group-options summary { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; list-style: none; }
+.group-options summary::after { content: ''; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .15s ease; }
+.group-options[open] summary::after { transform: translateY(2px) rotate(225deg); }
 .group-options summary::-webkit-details-marker { display: none; }
 .group-options-menu { position: absolute; right: 0; top: calc(100% + 8px); width: 170px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px #00000066; z-index: 2; }
 .group-options-menu button { display: block; width: 100%; border: 0; text-align: left; background: var(--surface); padding: 10px; font-size: 13px; color: var(--accent); border-radius: 4px; }

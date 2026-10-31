@@ -336,6 +336,9 @@
   for (const name of ['expenses', 'balances', 'spending']) {
     $(`#${name}-tab`).onclick = () => { section = name; render(); };
   }
+  document.addEventListener('click', event => {
+    if (!event.target.closest('#group-options')) $('#group-options').open = false;
+  });
   document.addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button || button.disabled) return;

@@ -82,6 +82,12 @@ async function main(){
  await run(`document.querySelector('#close-dialog').click()`);
  await run(`document.querySelector('.expense-row summary').click()`);
  assert.match(await evaluate(`document.querySelector('.expense-expanded').textContent`),/33.34/);
+ await run(`document.querySelector('#group-options summary').click()`);
+ assert.equal(await evaluate(`document.querySelector('#group-options').open`),true,'Group options opens');
+ await run(`document.querySelector('.group-options-menu').click()`);
+ assert.equal(await evaluate(`document.querySelector('#group-options').open`),true,'Clicking inside keeps group options open');
+ await run(`document.querySelector('#page-title').click()`);
+ assert.equal(await evaluate(`document.querySelector('#group-options').open`),false,'Clicking outside closes group options');
  await run(`document.querySelector('#spending-tab').click()`);
  assert.equal(await evaluate(`document.querySelector('#spending-section').hidden`),false);
  assert.equal(await evaluate(`document.querySelector('#expenses-section').hidden`),true);

@@ -82,6 +82,15 @@ async function main(){
  await run(`document.querySelector('#close-dialog').click()`);
  await run(`document.querySelector('.expense-row summary').click()`);
  assert.match(await evaluate(`document.querySelector('.expense-expanded').textContent`),/33.34/);
+ await run(`document.querySelector('#spending-tab').click()`);
+ assert.equal(await evaluate(`document.querySelector('#spending-section').hidden`),false);
+ assert.equal(await evaluate(`document.querySelector('#expenses-section').hidden`),true);
+ assert.equal(await evaluate(`document.querySelectorAll('#spending .spending-row').length`),3,'Every member has a spending row');
+ assert.match(await evaluate(`document.querySelector('#spending .spending-row summary').textContent`),/33\.34/,'Row shows the member total');
+ await run(`document.querySelector('#spending .spending-row summary').click()`);
+ assert.match(await evaluate(`document.querySelector('#spending .spending-row .spending-items').textContent`),/Lunch.*33\.34/s,'Selecting a member shows the split-up');
+ await run(`document.querySelector('#spending-tab').click()`);
+ assert.equal(await evaluate(`document.querySelector('#spending .spending-row').open`),true,'Re-rendering keeps the member open');
  await run(`document.querySelector('#balances-tab').click()`);
  assert.equal(await evaluate(`document.querySelector('#expenses-section').hidden`),true);
  await run(`document.querySelector('[data-pay]').click();document.querySelector('#submit').click()`);

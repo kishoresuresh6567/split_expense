@@ -104,4 +104,17 @@ test('Non simplified repayments show each expense and account for recorded payme
  g.payments.push({from:'raji',to:'preethi',amount:75000});
  assert.deepEqual(directSettlements(g).at(-1),{from:'preethi',to:'raji',amount:25000,expense:'Payment adjustment'});
 });
+test('Member spending separates shares from amounts paid and ignores repayments',()=>{
+ const {memberSpending}=require('../public/js/expense-logic');
+ const dinner={id:'x',name:'Dinner',amount:10000,payer:'a',members:['b','c'],split:{method:'amounts',values:{b:'70',c:'30'}}};
+ const taxi={id:'y',name:'Taxi',amount:101,payer:'b',members:['a','b','c']};
+ const g={members:[{id:'a'},{id:'b'},{id:'c'},{id:'d'}],expenses:[dinner,taxi],payments:[{id:'p',from:'b',to:'a',amount:500}]};
+ const [a,b,c,d]=memberSpending(g);
+ assert.deepEqual([a.spent,a.paid],[34,10000]);
+ assert.deepEqual(a.items.map(item=>[item.expense.id,item.share]),[['x',0],['y',34]],'A payer outside the split still sees the expense');
+ assert.deepEqual([b.spent,b.paid],[7034,101]);
+ assert.deepEqual([c.spent,c.paid],[3033,0]);
+ assert.deepEqual([d.spent,d.paid,d.items],[0,0,[]]);
+ assert.equal(a.spent+b.spent+c.spent+d.spent,10101,'Shares add up to total expenses');
+});
 test('Invalid amounts and repeated members cannot produce a split',()=>{for(const amount of [0,-1,1.5,NaN])assert.throws(()=>shares(amount,['a']));assert.throws(()=>shares(10,[]));assert.throws(()=>shares(10,['a','a']));});

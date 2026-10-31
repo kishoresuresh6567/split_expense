@@ -39,6 +39,19 @@ const Views = (() => {
     return {html: html || `<div class="empty">${query ? 'No matching expenses.' : 'No expenses yet. Click + Add expense to get started.'}</div>`, count: expenses.length};
   }
 
+  function spending(group) {
+    return Split.memberSpending(group).map(row => {
+      const items = row.items.slice().sort((a, b) => b.expense.date.localeCompare(a.expense.date));
+      return `<details class="spending-row" data-spending="${escape(row.id)}">
+      <summary><div class="expense-main"><strong>${escape(memberName(group, row.id))}</strong><small>Paid ${money(row.paid)} · ${items.length} ${items.length === 1 ? 'expense' : 'expenses'}</small></div>
+        <span class="expense-amount">${money(row.spent)}</span><span class="expand-label">Details ⌄</span></summary>
+      <div class="expense-expanded"><div class="spending-items">
+        ${items.map(({expense, share}) => `<div class="share-row"><div class="expense-main"><strong>${escape(expense.name)}</strong><small>${date(expense.date)} · ${escape(memberName(group, expense.payer))} paid ${money(expense.amount)} · ${Split.splitMethods[expense.split?.method || 'even']}</small></div><span>${money(share)}</span></div>`).join('') || '<p>No expenses for this member yet.</p>'}
+      </div></div>
+    </details>`;
+    }).join('');
+  }
+
   function transfers(group, canRecord = () => true, mode = 'simplified') {
     const transfers = mode === 'direct' ? Split.directSettlements(group) : Split.settlements(group);
     return transfers.map(transfer => `<div class="transfer">
@@ -65,5 +78,5 @@ const Views = (() => {
           <small class="member-edit-error" role="alert"></small></div></div>`;
     }).join('');
   }
-  return {escape, money, memberName, memberLabel, setNames, setName, groups, summary, expenseRows, transfers, payments, members};
+  return {escape, money, memberName, memberLabel, setNames, setName, groups, summary, expenseRows, spending, transfers, payments, members};
 })();

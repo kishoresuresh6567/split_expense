@@ -103,7 +103,7 @@
     $('#welcome').hidden = !user || Boolean(group);
     $('#group-workspace').hidden = !group;
     if (!group) {
-      for (const id of ['expenses','stats','payments','settlements','page-title','page-description']) $(`#${id}`).replaceChildren();
+      for (const id of ['expenses','spending','stats','payments','settlements','page-title','page-description']) $(`#${id}`).replaceChildren();
       return;
     }
     $('#group-options').open = false;
@@ -118,17 +118,19 @@
     $('#page-title').textContent = group.name;
     $('#page-description').textContent = `${group.closed ? 'Closed group · ' : ''}${group.members.length} members · Expenses in INR`;
     $('#stats').innerHTML = Views.summary(group);
-    for (const name of ['expenses', 'balances']) {
+    for (const name of ['expenses', 'balances', 'spending']) {
       const active = section === name;
       $(`#${name}-section`).hidden = !active;
       $(`#${name}-tab`).classList.toggle('active', active);
       if (active) $(`#${name}-tab`).setAttribute('aria-current', 'page');
       else $(`#${name}-tab`).removeAttribute('aria-current');
     }
-    const openIds = [...document.querySelectorAll('details[open]')].map(row => row.dataset.expense);
+    const rowKey = row => row.dataset.expense || row.dataset.spending;
+    const openIds = [...document.querySelectorAll('details[open]')].map(rowKey);
     const expenses = Views.expenseRows(group, search, expense => canEditExpense(group, expense));
     $('#expenses').innerHTML = expenses.html;
-    document.querySelectorAll('details').forEach(row => row.open = openIds.includes(row.dataset.expense));
+    $('#spending').innerHTML = Views.spending(group);
+    document.querySelectorAll('details').forEach(row => row.open = openIds.includes(rowKey(row)));
     $('#expense-count').textContent = `${expenses.count} ${expenses.count === 1 ? 'expense' : 'expenses'}`;
     $('#settlement-mode').value = settlementMode;
     $('#settlements').innerHTML = Views.transfers(group, transfer => receivesPayment(group, transfer.to), settlementMode);
@@ -331,7 +333,7 @@
   $('#cancel').onclick = Forms.close;
   $('#search').oninput = event => { search = event.target.value; render(); };
   $('#settlement-mode').onchange = event => { settlementMode = event.target.value; render(); };
-  for (const name of ['expenses', 'balances']) {
+  for (const name of ['expenses', 'balances', 'spending']) {
     $(`#${name}-tab`).onclick = () => { section = name; render(); };
   }
   document.addEventListener('click', async event => {
@@ -471,7 +473,7 @@
     state = {groups:[]}; records.clear(); selectedGroupId = null;
     Forms.close(); closeGroups();
     // Remove account data from hidden DOM as well as the visible workspace.
-    for (const id of ['fields','expenses','stats','payments','settlements','page-title','page-description']) $(`#${id}`).replaceChildren();
+    for (const id of ['fields','expenses','spending','stats','payments','settlements','page-title','page-description']) $(`#${id}`).replaceChildren();
     $('#group-link-message').textContent = '';
     $('#account-email').textContent = user?.email || '';
     $('#account-name').textContent = '';

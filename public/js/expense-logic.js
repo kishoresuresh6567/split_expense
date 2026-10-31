@@ -55,6 +55,18 @@
     }
     return debts.filter(debt=>debt.amount>0);
   }
+  function memberSpending(g){
+    const rows=g.members.map(m=>({id:m.id,spent:0,paid:0,items:[]}));
+    for(const expense of g.expenses){
+      const parts=allocations(expense);
+      for(const row of rows){
+        const share=parts.find(part=>part.id===row.id)?.amount||0,paid=expense.payer===row.id?expense.amount:0;
+        if(!share&&!paid)continue;
+        row.spent+=share;row.paid+=paid;row.items.push({expense,share});
+      }
+    }
+    return rows;
+  }
   function memberRemovalReason(g,id){
     if(!g.members.some(m=>m.id===id))return 'This member is no longer in the group.';
     if(g.expenses.some(e=>e.payer===id||e.members.includes(id))||g.payments.some(p=>p.from===id||p.to===id))return 'This member has recorded expenses or repayments. Remove those records first to keep balances accurate.';
@@ -71,5 +83,5 @@
     allocations(next);
     Object.assign(e,next);
   }
-  const api={shares,allocations,decimalUnits,splitMethods,balances,settlements,directSettlements,memberRemovalReason,removeMember,updateExpenseSplit};if(typeof module!=='undefined')module.exports=api;else root.Split=api;
+  const api={shares,allocations,decimalUnits,splitMethods,balances,settlements,directSettlements,memberSpending,memberRemovalReason,removeMember,updateExpenseSplit};if(typeof module!=='undefined')module.exports=api;else root.Split=api;
 })(globalThis);

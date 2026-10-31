@@ -39,6 +39,8 @@ An expense can be edited or deleted only by the person who added it or the membe
 Only the member receiving a repayment can record or undo it. Recording a repayment confirms money was received; the app does not transfer funds.
 The Balances view offers **Simplified** repayments, which net all expenses into final balances, and **Non simplified (by expense)** repayments, which show each member's share owed to each expense payer. Both views include recorded repayments. Payments that exceed a direct expense debt appear as a payment adjustment in the expense view.
 
+The Spending view shows each member's total share of expenses and what they paid upfront; selecting a member lists every expense behind those totals. Repayments are not counted as spending.
+
 The **Share group** option has been removed. Add a member's email under **Manage members**; their group appears after they sign in. The app sends no invitation email. Previously issued links still work for listed members, but new links cannot be created in the app.
 
 | Action | Creator | Listed email | Unlisted email |

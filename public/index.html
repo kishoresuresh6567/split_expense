@@ -83,6 +83,7 @@
       <nav class="tabs" aria-label="Group sections">
         <button id="expenses-tab" class="tab active" aria-current="page">Expenses</button>
         <button id="balances-tab" class="tab">Balances</button>
+        <button id="spending-tab" class="tab">Spending</button>
       </nav>
       <section id="expenses-section" aria-labelledby="expenses-title">
         <div class="section-heading"><div><h2 id="expenses-title">Expenses</h2><p>Record a cost and choose who shares it.</p></div><button class="primary" id="add-expense">+ Add expense</button></div>
@@ -98,6 +99,10 @@
           <div class="section-heading"><div><h2>Repayment history</h2><p>These payments are included in the balances above.</p></div></div>
           <div id="payments" class="panel"></div>
         </section>
+      </section>
+      <section id="spending-section" aria-labelledby="spending-title" hidden>
+        <div class="section-heading"><div><h2 id="spending-title">What each member spent</h2><p>Spent is a member's share of expenses. Paid is what they covered upfront. Repayments are not counted. Select a member to see the split-up.</p></div></div>
+        <div id="spending" class="panel"></div>
       </section>
     </div>
   </main>

@@ -48,7 +48,7 @@ The **Share group** option has been removed. Add a member's email under **Manage
 | Edit/delete an expense | If adder or payer | If adder or payer | No |
 | Record/undo a repayment | If recipient | If recipient | No |
 | Manage participants and their access emails | Yes | Yes | No |
-| Close/reopen/delete group | Yes | No | No |
+| Rename/close/reopen/delete group | Yes | No | No |
 
 Closed groups remain readable by listed members; only the creator can reopen them. A previously issued link shows only its linked group. **Go to my account** leaves link mode.
 

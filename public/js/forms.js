@@ -33,6 +33,11 @@ const Forms = (() => {
       <p class="form-help">Your signed-in email is added automatically. Separate other email addresses with commas; you can add more members later.</p>`, save, 'Create group');
   }
 
+  function rename(group, save) {
+    open('Rename group', `<label for="rename-group-name">Group name</label><input id="rename-group-name" name="name" maxlength="60" value="${escape(group.name)}" required>`, save, 'Save name');
+    $('#rename-group-name').select();
+  }
+
   function members(group, save) {
     open('Manage members', `<p>${escape(group.name)}</p><div id="member-list">${Views.members(group)}</div>
       <label for="new-member-emails">Add member emails</label><input id="new-member-emails" name="emails" maxlength="7600" placeholder="Emails separated by commas">
@@ -130,5 +135,5 @@ const Forms = (() => {
   function confirm(title, message, save, label) {
     open(title, `<p>${escape(message)}</p>`, save, label);
   }
-  return {open, close, group, members, expense, confirm, today};
+  return {open, close, group, rename, members, expense, confirm, today};
 })();

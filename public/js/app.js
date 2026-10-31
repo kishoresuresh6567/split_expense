@@ -111,6 +111,7 @@
     $('#manage-members').hidden = Boolean(group.closed);
     $('#group-options').hidden = !isOwner(group);
     $('#add-expense').hidden = Boolean(group.closed);
+    $('#rename-group').hidden = Boolean(group.closed);
     $('#close-group').hidden = Boolean(group.closed);
     $('#reopen-group').hidden = !group.closed;
 
@@ -285,6 +286,17 @@
     }, 'Close group');
   }
 
+  function renameGroup() {
+    const group = currentGroup();
+    $('#group-options').open = false;
+    Forms.rename(group, async data => {
+      const name = data.get('name').trim();
+      if (!name) throw Error('Enter a group name.');
+      if (name === group.name) return;
+      await commit(next => { next.groups.find(item => item.id === group.id).name = name; }, 'Group renamed.');
+    });
+  }
+
   function deleteGroup() {
     const group = currentGroup();
     $('#group-options').open = false;
@@ -297,6 +309,7 @@
     }, 'Delete group');
   }
 
+  $('#rename-group').onclick = renameGroup;
   $('#close-group').onclick = () => changeGroupStatus(true).catch(error => notify(error.message));
   $('#reopen-group').onclick = () => changeGroupStatus(false).catch(error => notify(error.message));
   $('#delete-group').onclick = deleteGroup;
